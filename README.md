@@ -71,7 +71,7 @@ npm run qualify:uhd
 ```
 
 The default local profile verifies 4K30. The GitHub-hosted release gate uses
-4K24 because shared runners provide software decoding rather than a stable GPU
+4K20 because shared runners provide software decoding rather than a stable GPU
 decoder. Target-device cadence still depends on its WebCodecs decoder, GPU,
 and thermal budget. 4K60 can be tested with `AIR_UHD_SOURCE_FPS=60`; TV and
 native adapters can publish stronger hardware profiles without changing this

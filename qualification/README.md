@@ -23,6 +23,6 @@ AIR_UHD_MAX_DROP_PERCENT=10 \
 npm run qualify:uhd
 ```
 
-Hosted CI uses a 24 FPS source with a 22 FPS floor and the same 5% drop ceiling
+Hosted CI uses a 20 FPS source with an 18 FPS floor and the same 5% drop ceiling
 because shared runners do not provide a stable hardware decoder. It still
 requires actual 4K frame presentation and uploads the JSON evidence artifact.
