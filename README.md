@@ -1,6 +1,7 @@
 # Air video
 
-`@get-air/video` is Air's DOM-first video controller for browsers and smart TVs.
+`@get-air/video` owns Air's platform-neutral video controller. Playback
+platforms plug into its backend contract, so applications keep one API.
 
 ## Platforms
 
@@ -19,8 +20,11 @@ Tauri or another native bridge. It is lazy-loaded only when requested.
 Codec support comes from the runtime's WebCodecs or platform decoder. webOS and
 Vizio are HTML-backed integrations, not vendor-certified native adapters.
 
-Native Tauri playback lives in
-[`@get-air/video-tauri`](https://github.com/get-air/tauri-video-plugin).
+Tauri plugs into that same controller instead of replacing it:
+
+`@get-air/video` →
+[`@get-air/video-tauri`](https://github.com/get-air/tauri-video-plugin)
+(`tauri` backend) → `tauri-plugin-video` (Rust/native engines)
 
 ## Install
 
@@ -47,14 +51,22 @@ The ordered backend list provides fallback while keeping one stable controller.
 
 ## Entrypoints
 
-| Entrypoint | Purpose |
-| --- | --- |
-| `@get-air/video` | Promise-based DOM and TV API |
-| `@get-air/video/effect` | Effect service, layers, controllers, and typed errors |
-| `@get-air/video/react` | React player and TV focus helpers |
-| `@get-air/video/canvas` | Framework-neutral canvas integration |
-| `@get-air/video/solid` | SolidTV helpers |
-| `@get-air/video/blits` | Blits helpers |
+Every integration uses the same backend contract and can use Tauri on its
+supported targets:
+
+| Entrypoint | Purpose | Connect Tauri with |
+| --- | --- | --- |
+| `@get-air/video` | Promise-based DOM and TV API | `createTauriVideoClient()` |
+| `@get-air/video/effect` | Effect services and typed errors | `layerTauriVideoBackend()` |
+| `@get-air/video/react` | React player and TV focus | `client` prop |
+| `@get-air/video/canvas` | Framework-neutral canvas | `client` option |
+| `@get-air/video/solid` | SolidTV helpers | `client` option |
+| `@get-air/video/blits` | Blits helpers | `client` option |
+
+The Tauri client and Effect layer come from `@get-air/video-tauri`; framework
+imports stay in this package. Canvas-based renderers also need a transparent
+video aperture as shown in the
+[Tauri examples](https://github.com/get-air/tauri-video-plugin/tree/main/examples).
 
 Release CI plays a real 3840×2160 H.264/AAC MKV and checks cadence, HTTP ranges,
 geometry, cleanup, and zero additional decoded-frame copies.
