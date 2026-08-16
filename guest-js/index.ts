@@ -149,6 +149,54 @@ export interface PlayerCapabilities {
   readonly frameAccurateSeeking: boolean
 }
 
+/**
+ * Cross-package marker for adapter errors that the core player may pass
+ * through unchanged. `Symbol.for` keeps the marker stable if an application
+ * resolves more than one copy of `@get-air/video`.
+ */
+export const VIDEO_PLAYER_ERROR_MARKER = Symbol.for('@get-air/video/VideoPlayerError')
+
+/** Structural contract implemented by Effect `Schema.TaggedError` values. */
+export interface TaggedVideoPlayerError extends Error {
+  readonly _tag: string
+}
+
+/**
+ * Adapter packages augment this map with their tagged error types. Runtime
+ * errors must also be opted in with `markVideoPlayerError` before rejection.
+ */
+export interface VideoPlayerErrorMap {}
+
+/** Errors contributed through `VideoPlayerErrorMap`. */
+export type RegisteredVideoPlayerError = Extract<
+  VideoPlayerErrorMap[keyof VideoPlayerErrorMap],
+  TaggedVideoPlayerError
+>
+
+/**
+ * Opt a tagged adapter error into the core player's typed error channel.
+ * The non-enumerable marker does not alter schema serialization or IPC data.
+ */
+export function markVideoPlayerError<ErrorType extends TaggedVideoPlayerError>(
+  error: ErrorType,
+): ErrorType {
+  if (!(error instanceof Error)
+    || typeof error._tag !== 'string'
+    || error._tag.length === 0) {
+    throw new TypeError('markVideoPlayerError requires an Error with a non-empty _tag')
+  }
+  const marked = error as ErrorType & Record<PropertyKey, unknown>
+  if (marked[VIDEO_PLAYER_ERROR_MARKER] !== true) {
+    Object.defineProperty(error, VIDEO_PLAYER_ERROR_MARKER, {
+      value: true,
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    })
+  }
+  return error
+}
+
 export interface VideoPluginError {
   code: string
   message: string

@@ -1,5 +1,18 @@
 # Changelog
 
+Release numbering follows the
+[versioning and compatibility policy](VERSIONING.md).
+
+## 0.1.1
+
+- Added an explicit, augmentable adapter-error contract so platform packages
+  can preserve their schema-backed typed errors through both Promise and Effect
+  clients without coupling core to a platform runtime.
+- Preserved registered adapter errors from controller operations while keeping
+  unmarked or merely tag-shaped failures normalized as `VideoLoadError`.
+- Added an enforced release-consistency gate and documented the independent
+  core/platform versioning policy.
+
 ## 0.1.0
 
 - Add the DOM-first player/controller API and explicit backend registry.

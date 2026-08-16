@@ -71,6 +71,36 @@ Omit `autoPriority` for explicit-only adapters. MediaBunny uses this rule so
 `open` returns the same internal controller contract implemented by built-in
 backends. The public client wraps it in a stable controller before returning.
 
+### Adapter-specific errors
+
+Adapters can extend the typed player error channel without making core depend
+on a platform package. Register the error type with module augmentation and
+mark each rejected instance explicitly:
+
+```ts
+import { markVideoPlayerError } from '@get-air/video'
+import { Schema } from 'effect'
+
+class AdapterProtocolError extends Schema.TaggedError<AdapterProtocolError>()(
+  'AdapterProtocolError',
+  { message: Schema.String },
+) {}
+
+declare module '@get-air/video' {
+  interface VideoPlayerErrorMap {
+    AdapterProtocolError: AdapterProtocolError
+  }
+}
+
+throw markVideoPlayerError(new AdapterProtocolError({
+  message: 'The adapter and native runtime use different protocols',
+}))
+```
+
+Marked errors retain their class, tag, and fields through both Promise and
+Effect clients, including controller operations. Unmarked or merely
+tag-shaped failures are normalized to `VideoLoadError`.
+
 ## Controller
 
 ```ts

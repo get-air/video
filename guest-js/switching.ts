@@ -3,9 +3,8 @@ import { parse } from '@plussub/srt-vtt-parser'
 import { Cause, Effect, Exit, Option } from 'effect'
 
 import {
-  VideoBackendUnavailableError,
+  isVideoPlayerError,
   VideoControllerStateError,
-  VideoFeatureUnavailableError,
   VideoLoadError,
   type VideoPlayerError,
 } from './errors'
@@ -561,10 +560,7 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
   }
 
   #normalizeOperationError(operation: string, cause: unknown): VideoPlayerError {
-    if (cause instanceof VideoBackendUnavailableError
-      || cause instanceof VideoControllerStateError
-      || cause instanceof VideoFeatureUnavailableError
-      || cause instanceof VideoLoadError) return cause
+    if (isVideoPlayerError(cause)) return cause
     return new VideoLoadError({
       backend: this.#lastBackend,
       message: `Unable to ${operation}`,

@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { layerHttpTransport } from '@get-air/http/effect'
-import { Effect, Layer } from 'effect'
+import { Effect, Layer, Schema } from 'effect'
 
 import {
   attachVideoEffect,
@@ -15,7 +15,30 @@ import type {
   VideoBackendAdapter,
   VideoControllerEventMap,
 } from './index'
-import { createVideoClient } from './index'
+import { createVideoClient, markVideoPlayerError } from './index'
+
+class TestAdapterProtocolMismatchError extends Schema.TaggedError<TestAdapterProtocolMismatchError>()(
+  'TestAdapterProtocolMismatchError',
+  {
+    expectedProtocolVersion: Schema.Int,
+    actualProtocolVersion: Schema.Int,
+    message: Schema.String,
+  },
+) {}
+
+declare module './index' {
+  interface VideoPlayerErrorMap {
+    TestAdapterProtocolMismatchError: TestAdapterProtocolMismatchError
+  }
+}
+
+function protocolMismatchError(): TestAdapterProtocolMismatchError {
+  return markVideoPlayerError(new TestAdapterProtocolMismatchError({
+    expectedProtocolVersion: 2,
+    actualProtocolVersion: 1,
+    message: 'The adapter and native plugin use different protocols',
+  }))
+}
 
 const capabilities: PlayerCapabilities = {
   backend: 'native-surface',
@@ -100,6 +123,119 @@ describe('external backend adapters', () => {
       _tag: 'VideoBackendUnavailableError',
       backend: 'not-installed',
     })
+  })
+
+  it('preserves a marked adapter error and its fields at the Promise boundary', async () => {
+    const failure = protocolMismatchError()
+    const adapter: VideoBackendAdapter = {
+      id: 'protocol-promise',
+      isAvailable: () => true,
+      open: async () => { throw failure },
+    }
+    const client = createVideoClient({ adapters: [adapter] })
+
+    let caught: unknown
+    try {
+      await client.attach(document.createElement('video'), {
+        source: 'movie.mkv',
+        backend: 'protocol-promise',
+      })
+    } catch (cause) {
+      caught = cause
+    }
+
+    expect(caught).toBeInstanceOf(TestAdapterProtocolMismatchError)
+    expect(caught).toMatchObject({
+      _tag: 'TestAdapterProtocolMismatchError',
+      expectedProtocolVersion: 2,
+      actualProtocolVersion: 1,
+    })
+  })
+
+  it('exposes marked adapter errors to Effect catchTag without losing fields', async () => {
+    const failure = protocolMismatchError()
+    const adapter: VideoBackendAdapter = {
+      id: 'protocol-effect',
+      isAvailable: () => true,
+      open: async () => { throw failure },
+    }
+    const InfrastructureLive = Layer.mergeAll(
+      layerHttpTransport({ fetch: globalThis.fetch }),
+      layerVideoBackends([adapter]),
+    )
+    const MainLive = VideoPlayerService.Default.pipe(
+      Layer.provideMerge(InfrastructureLive),
+    )
+    const recovered = attachVideoEffect(document.createElement('video'), {
+      source: 'movie.mkv',
+      backend: 'protocol-effect',
+    }).pipe(
+      Effect.catchTag('TestAdapterProtocolMismatchError', (error) => Effect.succeed({
+        expectedProtocolVersion: error.expectedProtocolVersion,
+        actualProtocolVersion: error.actualProtocolVersion,
+        message: error.message,
+      })),
+      Effect.provide(MainLive),
+    )
+
+    await expect(Effect.runPromise(recovered)).resolves.toEqual({
+      expectedProtocolVersion: 2,
+      actualProtocolVersion: 1,
+      message: failure.message,
+    })
+  })
+
+  it('wraps an unmarked tagged Error instead of trusting its shape', async () => {
+    const failure = new TestAdapterProtocolMismatchError({
+      expectedProtocolVersion: 2,
+      actualProtocolVersion: 1,
+      message: 'Unmarked protocol failure',
+    })
+    const adapter: VideoBackendAdapter = {
+      id: 'protocol-unmarked',
+      isAvailable: () => true,
+      open: async () => { throw failure },
+    }
+    const client = createVideoClient({ adapters: [adapter] })
+
+    await expect(client.attach(document.createElement('video'), {
+      source: 'movie.mkv',
+      backend: 'protocol-unmarked',
+    })).rejects.toMatchObject({
+      _tag: 'VideoLoadError',
+      backend: 'protocol-unmarked',
+      cause: 'Unmarked protocol failure',
+    })
+  })
+
+  it('preserves marked adapter errors from controller operations', async () => {
+    const failure = protocolMismatchError()
+    const backend = fakeBackend(document.createElement('video'), 1)
+    backend.play = vi.fn(async () => { throw failure })
+    const adapter: VideoBackendAdapter = {
+      id: 'protocol-operation',
+      isAvailable: () => true,
+      open: async () => backend,
+    }
+    const client = createVideoClient({ adapters: [adapter] })
+    const controller = await client.attach(backend.element, {
+      source: 'movie.mkv',
+      backend: 'protocol-operation',
+    })
+
+    let caught: unknown
+    try {
+      await controller.play()
+    } catch (cause) {
+      caught = cause
+    }
+    expect(caught).toBeInstanceOf(TestAdapterProtocolMismatchError)
+    expect(caught).toMatchObject({
+      _tag: 'TestAdapterProtocolMismatchError',
+      expectedProtocolVersion: 2,
+      actualProtocolVersion: 1,
+    })
+    await controller.destroy()
   })
 
   it('continues past an unregistered adapter in an ordered chain', async () => {

@@ -5,9 +5,9 @@ import { Context, Effect, Layer } from 'effect'
 import { attachHtmlVideo } from './backends/html'
 import { attachTizenVideo, hasTizenAvPlay } from './backends/tizen'
 import {
+  isVideoPlayerError,
   VideoBackendUnavailableError,
   VideoControllerStateError,
-  VideoFeatureUnavailableError,
   VideoLoadError,
   type VideoPlayerError,
 } from './errors'
@@ -38,6 +38,7 @@ import {
 } from './switching'
 
 export {
+  isVideoPlayerError,
   VideoBackendUnavailableError,
   VideoControllerStateError,
   VideoFeatureUnavailableError,
@@ -347,10 +348,7 @@ function isVizioRuntime(context: VideoRuntimeContext): boolean {
 }
 
 function normalizePlayerError(backend: VideoBackendId, cause: unknown): VideoPlayerError {
-  if (cause instanceof VideoBackendUnavailableError
-    || cause instanceof VideoControllerStateError
-    || cause instanceof VideoFeatureUnavailableError
-    || cause instanceof VideoLoadError) return cause
+  if (isVideoPlayerError(cause)) return cause
   return new VideoLoadError({
     backend,
     message: `Unable to start the ${backend} video backend`,

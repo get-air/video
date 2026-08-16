@@ -1,5 +1,10 @@
 import { Schema } from 'effect'
 
+import {
+  VIDEO_PLAYER_ERROR_MARKER,
+  type RegisteredVideoPlayerError,
+} from './index'
+
 export class VideoBackendUnavailableError extends Schema.TaggedError<VideoBackendUnavailableError>()(
   'VideoBackendUnavailableError',
   {
@@ -42,3 +47,17 @@ export type VideoPlayerError =
   | VideoFeatureUnavailableError
   | VideoLoadError
   | VideoControllerStateError
+  | RegisteredVideoPlayerError
+
+/** True for a built-in player error or an explicitly marked adapter error. */
+export function isVideoPlayerError(error: unknown): error is VideoPlayerError {
+  if (error instanceof VideoBackendUnavailableError
+    || error instanceof VideoControllerStateError
+    || error instanceof VideoFeatureUnavailableError
+    || error instanceof VideoLoadError) return true
+  if (!(error instanceof Error)) return false
+  const candidate = error as Error & Record<PropertyKey, unknown>
+  return candidate[VIDEO_PLAYER_ERROR_MARKER] === true
+    && typeof candidate._tag === 'string'
+    && candidate._tag.length > 0
+}

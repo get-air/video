@@ -189,3 +189,16 @@ operations remain Effects. Promise execution occurs only at the
 plain-JavaScript client boundary; services never call `runPromise`.
 
 See [API details](docs/api.md) and [platform behavior](docs/platforms.md).
+
+## Versioning
+
+Before 1.0, `@get-air/video` uses `0.COMPATIBILITY.PATCH`: compatible fixes
+and features increment `PATCH`, while breaking contracts increment
+`COMPATIBILITY`. Platform adapters declare supported core ranges and are not
+required to share this package's version. Read the complete
+[versioning and compatibility policy](VERSIONING.md).
+
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for repository boundaries, local
+validation, release rules, and the clone-safe contributor skills.

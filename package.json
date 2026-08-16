@@ -1,6 +1,6 @@
 {
   "name": "@get-air/video",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Air contributors",
   "description": "One lean DOM-first video API for MediaBunny, web, Tizen, webOS, and Vizio",
   "license": "MIT OR Apache-2.0",
@@ -68,6 +68,7 @@
     "docs/*.md",
     "react/player.css",
     "CHANGELOG.md",
+    "VERSIONING.md",
     "LICENSE-APACHE",
     "LICENSE-MIT",
     "README.md"
@@ -80,6 +81,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck && npm run check:effect && npm test",
     "check:effect": "effect-language-service diagnostics --project tsconfig.json --strict --format text",
+    "check:release": "node scripts/check-release-consistency.mjs",
     "prepublishOnly": "npm run build",
     "test": "vitest run"
   },

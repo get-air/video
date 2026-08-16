@@ -24,6 +24,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Verify release metadata consistency
+        run: npm run check:release
       - run: npm run check
       - run: npm run build
       - run: npm pack --dry-run --ignore-scripts
