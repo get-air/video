@@ -1,0 +1,60 @@
+name: Publish JavaScript API to npm
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    if: github.repository == 'get-air/video' && github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm install --global npm@11.19.0
+      - run: npm ci
+      - name: Verify stable release tag
+        run: |
+          package_version=$(node --print "require('./package.json').version")
+          test "$GITHUB_REF_NAME" = "v$package_version"
+          case "$package_version" in
+            *-*) echo "Prerelease versions must use a non-latest npm release workflow"; exit 1 ;;
+          esac
+      - run: npm run ci
+      - run: npm ci
+        working-directory: examples/solid-tv-app
+      - run: npm run build
+        working-directory: examples/solid-tv-app
+      - name: Qualify release 4K30 MediaBunny playback
+        env:
+          AIR_UHD_SOURCE_FPS: 30
+          AIR_UHD_MIN_FPS: 27
+          AIR_UHD_MAX_DROP_PERCENT: 5
+          AIR_UHD_DURATION_SECONDS: 8
+        run: npm run qualify:uhd
+      - name: Upload release 4K30 qualification evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: 4k30-mediabunny-release-qualification
+          path: qualification/artifacts/uhd-browser.json
+          if-no-files-found: error
+      - name: Publish to npm
+        env:
+          # NPM_TOKEN is used only to bootstrap the first package version.
+          # Delete it after configuring this workflow as the trusted publisher.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if test -z "$NODE_AUTH_TOKEN"; then
+            unset NODE_AUTH_TOKEN
+          fi
+          npm publish --access public --provenance

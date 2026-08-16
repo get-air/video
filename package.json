@@ -1,0 +1,138 @@
+{
+  "name": "@get-air/video",
+  "version": "0.1.0",
+  "author": "Air contributors",
+  "description": "One lean DOM-first video API for MediaBunny, web, Tizen, webOS, and Vizio",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/get-air/video.git"
+  },
+  "homepage": "https://github.com/get-air/video#readme",
+  "bugs": "https://github.com/get-air/video/issues",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "sideEffects": [
+    "./react/player.css"
+  ],
+  "keywords": [
+    "webcodecs",
+    "video",
+    "mediabunny",
+    "mkv",
+    "smart-tv"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "module",
+  "types": "./dist-js/guest-js/index.d.ts",
+  "main": "./dist-js/index.js",
+  "module": "./dist-js/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist-js/guest-js/index.d.ts",
+      "import": "./dist-js/index.js"
+    },
+    "./headless": {
+      "types": "./dist-js/guest-js/index.d.ts",
+      "import": "./dist-js/index.js"
+    },
+    "./effect": {
+      "types": "./dist-js/guest-js/effect.d.ts",
+      "import": "./dist-js/effect.js"
+    },
+    "./blits": {
+      "types": "./dist-js/blits/index.d.ts",
+      "import": "./dist-js/blits.js"
+    },
+    "./canvas": {
+      "types": "./dist-js/canvas/index.d.ts",
+      "import": "./dist-js/canvas.js"
+    },
+    "./solid": {
+      "types": "./dist-js/solid/index.d.ts",
+      "import": "./dist-js/solid.js"
+    },
+    "./react": {
+      "types": "./dist-js/react/index.d.ts",
+      "import": "./dist-js/react.js"
+    },
+    "./react/styles.css": "./react/player.css"
+  },
+  "files": [
+    "dist-js",
+    "docs/*.md",
+    "react/player.css",
+    "CHANGELOG.md",
+    "LICENSE-APACHE",
+    "LICENSE-MIT",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsx scripts/build.ts",
+    "ci": "npm run check && npm run build && npm pack --dry-run --ignore-scripts",
+    "ci:act": "act push --job package",
+    "qualify:uhd": "tsx qualification/uhd-browser.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "npm run typecheck && npm run check:effect && npm test",
+    "check:effect": "effect-language-service diagnostics --project tsconfig.json --strict --format text",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run"
+  },
+  "overrides": {
+    "nanoid": "^3.3.18"
+  },
+  "dependencies": {
+    "@get-air/http": "^0.1.0",
+    "@noriginmedia/norigin-spatial-navigation": "^3.3.0",
+    "@plussub/srt-vtt-parser": "^2.0.5",
+    "effect": "^3.22.1",
+    "mediabunny": "^1.54.0"
+  },
+  "peerDependencies": {
+    "@solidtv/renderer": "^1.6.3",
+    "@solidtv/solid": "^1.5.1",
+    "react": ">=18.2 <20",
+    "react-dom": ">=18.2 <20",
+    "solid-js": ">=1.9 <2"
+  },
+  "peerDependenciesMeta": {
+    "@solidtv/renderer": {
+      "optional": true
+    },
+    "@solidtv/solid": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "solid-js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@effect/language-service": "^0.87.2",
+    "@rollup/plugin-typescript": "^12.0.0",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@solidtv/renderer": "^1.6.3",
+    "@solidtv/solid": "^1.5.1",
+    "happy-dom": "^20.11.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "rollup": "^4.9.6",
+    "solid-js": "^1.9.9",
+    "tslib": "^2.8.1",
+    "tsx": "^4.23.11",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

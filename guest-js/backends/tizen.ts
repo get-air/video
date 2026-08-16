@@ -1,0 +1,463 @@
+import { VideoBackendUnavailableError, VideoFeatureUnavailableError } from '../errors'
+import type {
+  AttachVideoOptions,
+  MediaInfo,
+  MediaTrack,
+  PlaybackQuality,
+  PlayerCapabilities,
+  SessionStats,
+  TrackKind,
+  BackendVideoController,
+  VideoControllerEventMap,
+  VideoControlsTarget,
+  VideoFitMode,
+  VideoSource,
+} from '../index'
+
+interface AvPlayTrackInfo {
+  type: 'VIDEO' | 'AUDIO' | 'TEXT'
+  index: number
+  extra_info?: string
+}
+
+interface AvPlayListener {
+  onbufferingstart?: () => void
+  onbufferingprogress?: (percent: number) => void
+  onbufferingcomplete?: () => void
+  oncurrentplaytime?: (milliseconds: number) => void
+  onstreamcompleted?: () => void
+  onerror?: (error: string) => void
+  onevent?: (event: string, data: string) => void
+  onsubtitlechange?: (duration: number, text: string, data: unknown, type: number) => void
+  ondrmevent?: (event: string, data: unknown) => void
+}
+
+interface AvPlayApi {
+  open(uri: string): void
+  close(): void
+  prepareAsync(success: () => void, failure: (error: unknown) => void): void
+  play(): void
+  pause(): void
+  stop(): void
+  seekTo(milliseconds: number, success?: () => void, failure?: (error: unknown) => void): void
+  getState(): string
+  getDuration(): number
+  getCurrentTime(): number
+  getTotalTrackInfo(): AvPlayTrackInfo[]
+  getCurrentStreamInfo(): AvPlayTrackInfo[]
+  setSilentSubtitle(onoff: boolean): void
+  setSelectTrack(type: 'AUDIO' | 'TEXT', index: number): void
+  setDisplayRect(x: number, y: number, width: number, height: number): void
+  setDisplayMethod(method: string): void
+  setListener(listener: AvPlayListener): void
+}
+
+declare global {
+  interface Window {
+    webapis?: { avplay?: AvPlayApi }
+  }
+}
+
+let tizenSessionSequence = 0
+
+const AVPLAY_DISPLAY_WIDTH = 1920
+const AVPLAY_DISPLAY_HEIGHT = 1080
+
+export function hasTizenAvPlay(): boolean {
+  return typeof window !== 'undefined' && Boolean(window.webapis?.avplay)
+}
+
+export async function attachTizenVideo(
+  element: HTMLVideoElement,
+  options: AttachVideoOptions,
+): Promise<BackendVideoController> {
+  const avplay = window.webapis?.avplay
+  if (!avplay) {
+    throw new VideoBackendUnavailableError({
+      backend: 'tizen',
+      message: 'Samsung AVPlay is not available; load $WEBAPIS/webapis/webapis.js on a Tizen TV',
+    })
+  }
+  const controller = new TizenVideoController(element, options, avplay)
+  try {
+    await controller.start()
+    return controller
+  } catch (error) {
+    await controller.destroy().catch(() => undefined)
+    throw error
+  }
+}
+
+class TizenVideoController extends EventTarget implements BackendVideoController {
+  readonly element: HTMLVideoElement
+  readonly sessionId = `tizen-${Date.now()}-${++tizenSessionSequence}`
+  readonly capabilities: PlayerCapabilities = {
+    backend: 'tizen',
+    containers: 'platform',
+    codecs: 'platform',
+    drm: 'platform',
+    hdr: 'platform',
+    playbackRate: false,
+    volume: false,
+    videoFit: true,
+    videoZoom: false,
+    audioTrackSelection: true,
+    subtitleTrackSelection: true,
+    customHeaders: false,
+    frameAccurateSeeking: false,
+  }
+  readonly #options: AttachVideoOptions
+  readonly #avplay: AvPlayApi
+  readonly #media: MediaInfo = { seekable: true, live: false, tracks: [], chapters: [] }
+  readonly #originalVisibility: string
+  #resize?: ResizeObserver
+  #playerObject?: HTMLObjectElement
+  #hasTotalTrackInfo = false
+  #destroyed = false
+  #currentTime = 0
+  #playing = false
+
+  constructor(element: HTMLVideoElement, options: AttachVideoOptions, avplay: AvPlayApi) {
+    super()
+    this.element = element
+    this.#options = options
+    this.#avplay = avplay
+    this.#originalVisibility = element.style.visibility
+  }
+
+  get media(): MediaInfo { return this.#media }
+  get tracks(): readonly MediaTrack[] { return this.#media.tracks }
+
+  async start(): Promise<void> {
+    if (this.#options.signal?.aborted) throw this.#options.signal.reason
+    const source = normalizeSource(this.#options.source)
+    if (source.headers || source.cookies || source.userAgent || source.referrer || source.tlsCaFile) {
+      throw new VideoFeatureUnavailableError({
+        backend: 'tizen',
+        feature: 'customHeaders',
+        message: 'Samsung AVPlay does not provide a portable arbitrary-request-header API',
+      })
+    }
+    this.#installPlayerObject()
+    this.element.style.visibility = 'hidden'
+    this.#avplay.open(source.uri)
+    this.#avplay.setListener({
+      onbufferingprogress: () => {
+        this.dispatchEvent(new CustomEvent('bufferprogress', {
+          detail: { bufferedAhead: this.bufferedAhead() },
+        }))
+      },
+      oncurrentplaytime: (milliseconds) => {
+        this.#currentTime = milliseconds / 1000
+        if (!this.#hasTotalTrackInfo) this.#tryRefreshTotalTrackInfo()
+        this.dispatchEvent(new CustomEvent('timeupdate', { detail: { currentTime: this.#currentTime } }))
+      },
+      onstreamcompleted: () => {
+        this.#playing = false
+        this.element.dispatchEvent(new Event('pause'))
+        this.element.dispatchEvent(new Event('ended'))
+      },
+      onerror: (error) => {
+        this.dispatchEvent(new CustomEvent('error', {
+          detail: { code: 'tizen-avplay', message: String(error) },
+        }))
+      },
+    })
+    this.refreshLayout()
+    await new Promise<void>((resolve, reject) => this.#avplay.prepareAsync(resolve, reject))
+    this.#media.durationSeconds = this.#millisecondsToOptionalSeconds(this.#avplay.getDuration())
+    this.#media.live = this.#media.durationSeconds === undefined
+    this.#media.seekable = !this.#media.live
+    this.#media.container = inferContainer(source.uri)
+    this.#refreshCurrentTrackInfo()
+    if (source.startPositionSeconds !== undefined) await this.seek(source.startPositionSeconds)
+    if (typeof ResizeObserver !== 'undefined') {
+      this.#resize = new ResizeObserver(() => this.refreshLayout())
+      this.#resize.observe(this.element)
+    }
+    window.addEventListener('resize', this.#handleResize)
+    window.addEventListener('scroll', this.#handleResize, true)
+    this.#options.signal?.addEventListener('abort', () => void this.destroy(), { once: true })
+    this.element.dispatchEvent(new Event('loadedmetadata'))
+    this.element.dispatchEvent(new Event('durationchange'))
+    this.element.dispatchEvent(new Event('canplay'))
+    if (this.#options.autoplay) await this.play()
+  }
+
+  async play(): Promise<void> {
+    this.#avplay.play()
+    this.#playing = true
+    this.#tryRefreshTotalTrackInfo()
+    this.element.dispatchEvent(new Event('play'))
+    this.element.dispatchEvent(new Event('playing'))
+  }
+
+  pause(): void {
+    if (this.#avplay.getState() === 'PLAYING') this.#avplay.pause()
+    this.#playing = false
+    this.element.dispatchEvent(new Event('pause'))
+  }
+
+  async seek(positionSeconds: number): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      this.#avplay.seekTo(Math.max(0, Math.round(positionSeconds * 1000)), resolve, reject)
+    })
+    this.#currentTime = Math.max(0, positionSeconds)
+  }
+
+  async selectTrack(kind: TrackKind, trackId?: string): Promise<void> {
+    if (kind === 'video') {
+      throw new VideoFeatureUnavailableError({
+        backend: 'tizen',
+        feature: 'videoTrackSelection',
+        message: 'Samsung AVPlay setSelectTrack supports audio and subtitle tracks only',
+      })
+    }
+    this.#assertTrackSelectionState(kind)
+    if (!trackId) {
+      if (kind === 'subtitle') {
+        this.#avplay.setSilentSubtitle(true)
+        this.#media.tracks = this.#media.tracks.map((candidate) => ({
+          ...candidate,
+          selected: candidate.kind === 'subtitle' ? false : candidate.selected,
+        }))
+        this.dispatchEvent(new CustomEvent('trackchange', { detail: { kind } }))
+        return
+      }
+      throw new VideoFeatureUnavailableError({
+        backend: 'tizen',
+        feature: `${kind}TrackDisable`,
+        message: `AVPlay cannot disable the selected ${kind} track through the common API`,
+      })
+    }
+    const track = this.#media.tracks.find((candidate) => candidate.id === trackId && candidate.kind === kind)
+    if (!track) throw new Error(`Unknown ${kind} track: ${trackId}`)
+    if (kind === 'subtitle') this.#avplay.setSilentSubtitle(false)
+    this.#avplay.setSelectTrack(kind === 'audio' ? 'AUDIO' : 'TEXT', track.streamIndex)
+    this.#media.tracks = this.#media.tracks.map((candidate) => ({
+      ...candidate,
+      selected: candidate.kind === kind ? candidate.id === trackId : candidate.selected,
+    }))
+    this.dispatchEvent(new CustomEvent('trackchange', { detail: { kind, trackId } }))
+  }
+
+  async setVolume(_volume: number): Promise<void> {}
+
+  async setVideoFit(mode: VideoFitMode): Promise<void> {
+    const method = mode === 'fit'
+      ? 'PLAYER_DISPLAY_MODE_LETTER_BOX'
+      : mode === 'cover'
+        ? 'PLAYER_DISPLAY_MODE_FULL_SCREEN'
+        : 'PLAYER_DISPLAY_MODE_AUTO_ASPECT_RATIO'
+    this.#avplay.setDisplayMethod(method)
+  }
+
+  async setVideoZoom(_scale: number): Promise<void> {
+    throw new VideoFeatureUnavailableError({
+      backend: 'tizen',
+      feature: 'videoZoom',
+      message: 'AVPlay does not expose arbitrary video-surface scaling',
+    })
+  }
+
+  async stats(): Promise<SessionStats> {
+    return {
+      sessionId: this.sessionId,
+      encodedBytesBuffered: 0,
+      bufferedAheadSeconds: this.bufferedAhead(),
+      videoCodec: this.tracks.find((track) => track.kind === 'video' && track.selected)?.codec,
+      audioCodec: this.tracks.find((track) => track.kind === 'audio' && track.selected)?.codec,
+      hardwareBackend: 'Samsung AVPlay',
+      decodedFrameCopies: 0,
+      droppedFrames: 0,
+      visible: !this.element.hidden,
+      playing: this.#playing,
+    }
+  }
+
+  bufferedAhead(): number { return 0 }
+
+  playbackQuality(): PlaybackQuality {
+    return {
+      presentedFrames: 0,
+      mediaTimeSeconds: this.#currentTime,
+      measuredFps: 0,
+      totalVideoFrames: 0,
+      droppedVideoFrames: 0,
+      droppedFramePercent: 0,
+    }
+  }
+
+  refreshLayout(): void {
+    const rect = this.element.getBoundingClientRect()
+    if (this.#playerObject) {
+      Object.assign(this.#playerObject.style, {
+        left: `${rect.left}px`,
+        top: `${rect.top}px`,
+        width: `${Math.max(0, rect.width)}px`,
+        height: `${Math.max(0, rect.height)}px`,
+      })
+    }
+    const viewportWidth = Math.max(
+      1,
+      document.documentElement.clientWidth || window.innerWidth || AVPLAY_DISPLAY_WIDTH,
+    )
+    const viewportHeight = Math.max(
+      1,
+      document.documentElement.clientHeight || window.innerHeight || AVPLAY_DISPLAY_HEIGHT,
+    )
+    const left = clamp(rect.left, 0, viewportWidth)
+    const top = clamp(rect.top, 0, viewportHeight)
+    const right = clamp(rect.right, left, viewportWidth)
+    const bottom = clamp(rect.bottom, top, viewportHeight)
+    const x = clamp(Math.round(left * AVPLAY_DISPLAY_WIDTH / viewportWidth), 0, AVPLAY_DISPLAY_WIDTH - 1)
+    const y = clamp(Math.round(top * AVPLAY_DISPLAY_HEIGHT / viewportHeight), 0, AVPLAY_DISPLAY_HEIGHT - 1)
+    const width = clamp(
+      Math.round((right - left) * AVPLAY_DISPLAY_WIDTH / viewportWidth),
+      1,
+      AVPLAY_DISPLAY_WIDTH - x,
+    )
+    const height = clamp(
+      Math.round((bottom - top) * AVPLAY_DISPLAY_HEIGHT / viewportHeight),
+      1,
+      AVPLAY_DISPLAY_HEIGHT - y,
+    )
+    this.#avplay.setDisplayRect(
+      x,
+      y,
+      width,
+      height,
+    )
+  }
+
+  registerControls(_target: VideoControlsTarget): () => void { return () => undefined }
+
+  async destroy(): Promise<void> {
+    if (this.#destroyed) return
+    this.#destroyed = true
+    this.#resize?.disconnect()
+    window.removeEventListener('resize', this.#handleResize)
+    window.removeEventListener('scroll', this.#handleResize, true)
+    try {
+      const state = this.#avplay.getState()
+      if (state === 'PLAYING' || state === 'PAUSED' || state === 'READY') this.#avplay.stop()
+    } finally {
+      try {
+        this.#avplay.close()
+      } finally {
+        this.#playerObject?.remove()
+        this.#playerObject = undefined
+        this.element.style.visibility = this.#originalVisibility
+      }
+    }
+  }
+
+  on<K extends keyof VideoControllerEventMap>(
+    type: K,
+    listener: (event: VideoControllerEventMap[K]) => void,
+    options?: AddEventListenerOptions,
+  ): () => void {
+    const eventListener = listener as EventListener
+    this.addEventListener(type, eventListener, options)
+    return () => this.removeEventListener(type, eventListener, options)
+  }
+
+  readonly #handleResize = (): void => this.refreshLayout()
+
+  #installPlayerObject(): void {
+    const parent = this.element.parentElement
+    if (!parent) throw new Error('Samsung AVPlay requires the video anchor to have a parent element')
+    const playerObject = document.createElement('object')
+    playerObject.type = 'application/avplayer'
+    playerObject.setAttribute('aria-hidden', 'true')
+    playerObject.setAttribute('data-air-video-plane', 'tizen-avplay')
+    Object.assign(playerObject.style, {
+      position: 'fixed',
+      pointerEvents: 'none',
+    })
+    parent.insertBefore(playerObject, this.element.nextSibling)
+    this.#playerObject = playerObject
+  }
+
+  #refreshCurrentTrackInfo(): void {
+    const current = this.#avplay.getCurrentStreamInfo()
+    this.#media.tracks = current.map((track) => describeTrack(track, true))
+  }
+
+  #tryRefreshTotalTrackInfo(): void {
+    if (this.#hasTotalTrackInfo || this.#avplay.getState() !== 'PLAYING') return
+    try {
+      const selected = new Set(this.#avplay.getCurrentStreamInfo().map(trackKey))
+      this.#media.tracks = this.#avplay.getTotalTrackInfo().map((track) => {
+        return describeTrack(track, selected.has(trackKey(track)))
+      })
+      this.#hasTotalTrackInfo = true
+      for (const kind of ['audio', 'subtitle'] as const) {
+        const selectedTrack = this.#media.tracks.find((track) => track.kind === kind && track.selected)
+        if (this.#media.tracks.some((track) => track.kind === kind)) {
+          this.dispatchEvent(new CustomEvent('trackchange', {
+            detail: { kind, trackId: selectedTrack?.id },
+          }))
+        }
+      }
+    } catch {
+      // Some firmware reports PLAYING before track enumeration is ready. The
+      // first current-play-time callback retries without failing playback.
+    }
+  }
+
+  #assertTrackSelectionState(kind: 'audio' | 'subtitle'): void {
+    const state = this.#avplay.getState()
+    const supported = state === 'PLAYING' || (kind === 'subtitle' && state === 'PAUSED')
+    if (supported) return
+    throw new VideoFeatureUnavailableError({
+      backend: 'tizen',
+      feature: `${kind}TrackSelectionState`,
+      message: `Samsung AVPlay ${kind} track selection requires active playback${
+        kind === 'subtitle' ? ' or a paused player' : ''}`,
+    })
+  }
+
+  #millisecondsToOptionalSeconds(milliseconds: number): number | undefined {
+    return milliseconds > 0 ? milliseconds / 1000 : undefined
+  }
+}
+
+function normalizeSource(source: string | VideoSource): VideoSource {
+  return typeof source === 'string' ? { uri: source } : source
+}
+
+function describeTrack(track: AvPlayTrackInfo, selected: boolean): MediaTrack {
+  const kind: TrackKind = track.type === 'VIDEO' ? 'video' : track.type === 'AUDIO' ? 'audio' : 'subtitle'
+  let extra: Record<string, unknown> = {}
+  try { extra = track.extra_info ? JSON.parse(track.extra_info) as Record<string, unknown> : {} }
+  catch { /* AVPlay may provide vendor-specific non-JSON data */ }
+  const language = typeof extra.track_lang === 'string'
+    ? extra.track_lang
+    : typeof extra.language === 'string' ? extra.language : undefined
+  return {
+    id: `${kind}-${track.index}`,
+    kind,
+    streamIndex: track.index,
+    codec: String(extra.fourCC ?? extra.codec ?? ''),
+    caps: '',
+    label: language,
+    language,
+    selected,
+    default: selected,
+    forced: false,
+    width: typeof extra.Width === 'number' ? extra.Width : undefined,
+    height: typeof extra.Height === 'number' ? extra.Height : undefined,
+  }
+}
+
+function trackKey(track: AvPlayTrackInfo): string { return `${track.type}:${track.index}` }
+
+function inferContainer(uri: string): string | undefined {
+  const match = /\.([a-z0-9]+)(?:[?#]|$)/i.exec(uri)
+  return match?.[1]?.toLowerCase()
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value))
+}

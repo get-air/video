@@ -1,0 +1,7 @@
+node_modules/
+dist-js/
+*.tgz
+examples/solid-tv-app/node_modules/
+examples/solid-tv-app/dist/
+qualification/fixtures/
+qualification/artifacts/
