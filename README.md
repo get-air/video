@@ -70,10 +70,12 @@ Run it with:
 npm run qualify:uhd
 ```
 
-The release gate verifies 4K30 on Air's qualification runtime. Target-device
-cadence still depends on its WebCodecs decoder, GPU, and thermal budget. 4K60
-can be tested with `AIR_UHD_SOURCE_FPS=60`; TV and native adapters can publish
-stronger hardware profiles without changing this API.
+The default local profile verifies 4K30. The GitHub-hosted release gate uses
+4K24 because shared runners provide software decoding rather than a stable GPU
+decoder. Target-device cadence still depends on its WebCodecs decoder, GPU,
+and thermal budget. 4K60 can be tested with `AIR_UHD_SOURCE_FPS=60`; TV and
+native adapters can publish stronger hardware profiles without changing this
+API.
 
 ## External platform adapters
 

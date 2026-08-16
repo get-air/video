@@ -30,10 +30,11 @@ Codec availability is still determined by `VideoDecoder.isConfigSupported` /
 `AudioDecoder.isConfigSupported` in the runtime. An ordered HTML or platform
 adapter can follow MediaBunny when a codec is not decodable.
 
-The automated release profile verifies 3840×2160 at 30 FPS on the
-qualification runtime. It is not a cadence guarantee for every TV decoder.
-Use `AIR_UHD_SOURCE_FPS=60 npm run qualify:uhd` to measure a target device's
-4K60 path.
+The default local profile verifies 3840×2160 at 30 FPS. GitHub-hosted release
+CI uses a 24 FPS source because its shared runner has no stable hardware
+decoder. Neither result is a cadence guarantee for every TV decoder. Use
+`AIR_UHD_SOURCE_FPS=60 npm run qualify:uhd` to measure a target device's 4K60
+path.
 
 ## Samsung Tizen
 

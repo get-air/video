@@ -22,6 +22,6 @@ AIR_UHD_MAX_DROP_PERCENT=10 \
 npm run qualify:uhd
 ```
 
-CI uses looser performance thresholds because hosted runners do not provide a
-stable hardware decoder. It still requires actual 4K frame presentation and
-uploads the JSON evidence artifact.
+Hosted CI uses a 24 FPS source with a 22 FPS floor and the same 5% drop ceiling
+because shared runners do not provide a stable hardware decoder. It still
+requires actual 4K frame presentation and uploads the JSON evidence artifact.
