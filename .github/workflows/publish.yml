@@ -47,7 +47,7 @@ jobs:
           AIR_UHD_MAX_DROP_PERCENT: 5
           AIR_UHD_DURATION_SECONDS: 8
         run: npm run qualify:uhd
-      - name: Upload release 4K30 qualification evidence
+      - name: Upload release 4K20 qualification evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v6
         with:

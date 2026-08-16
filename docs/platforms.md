@@ -60,7 +60,13 @@ AVPlay accepts audio and text track selection, not video-track selection.
 Selecting no subtitle track uses `setSilentSubtitle(true)`.
 
 AVPlay owns a video plane, so the HTML video element acts as the geometry
-anchor. Availability and UHD codec limits depend on the TV model and firmware.
+anchor. The platform API is a singleton, so a second Tizen attachment is
+rejected without disturbing the active controller. Dedicated
+`VideoSource.cookies` and `VideoSource.userAgent` values map to AVPlay's
+`COOKIE` and `USER_AGENT` streaming properties after `open()` and before
+preparation. Arbitrary headers, referrer overrides, custom TLS authorities, and
+DRM-session setup are not exposed by this adapter. Availability and UHD codec
+limits depend on the TV model and firmware.
 
 ## webOS
 
@@ -69,11 +75,13 @@ It keeps a distinct backend ID for diagnostics and future webOS-specific
 adapters. It does not claim playback-rate changes, programmatic audio-track
 selection, arbitrary zoom, or DRM-session setup. A host may configure EME/DRM
 outside this API. Codec, DRM, and 4K support depend on the model's media
-pipeline and must be qualified on target hardware.
+pipeline and must be qualified on target hardware. Unsupported playback-rate
+and zoom calls reject with `VideoFeatureUnavailableError`.
 
-The published JavaScript targets ES2022. Current TV engines can consume it
-directly; applications supporting older webOS or Tizen generations must
-transpile this package and its dependencies to the engine level they deploy.
+The published JavaScript targets ES2022; this does not imply a minimum supported
+TV OS or model. Applications must either verify ES2022 support or transpile this
+package and its dependencies for every Tizen, webOS, and Vizio SmartCast engine
+they deploy. Platform media claims likewise require target-device qualification.
 
 ## Vizio SmartCast
 
@@ -81,7 +89,8 @@ The `vizio` backend likewise uses HTML media playback with a distinct runtime
 diagnostic ID, detected through the SmartCast user agent or `globalThis.VIZIO`.
 It is not a vendor-certified native SmartCast integration. Applications must
 validate their production codec, streaming, and UHD profile on representative
-models.
+models. The HTML-backed `setPlaybackRate` method delegates to the platform media
+element and can still reject values unsupported by a particular model.
 
 `suspendWhenHidden` is an adapter option rather than a universal DOM behavior.
 The Tauri adapter honors it; the built-in HTML, MediaBunny, and TV backends do

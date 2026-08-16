@@ -42,6 +42,7 @@ function backend(element: HTMLVideoElement, id: string) {
     seek: vi.fn(async () => undefined),
     selectTrack: vi.fn(async () => undefined),
     setVolume: vi.fn(async () => undefined),
+    setPlaybackRate: vi.fn(async () => undefined),
     setVideoFit: vi.fn(async () => undefined),
     setVideoZoom: vi.fn(async () => undefined),
     stats: vi.fn(async () => ({ sessionId: id, encodedBytesBuffered: 0,
@@ -88,6 +89,8 @@ describe('SwitchingVideoController', () => {
     }))
     expect(controller.sessionId).toBe('second')
     expect(changed).toHaveBeenCalledOnce()
+    await controller.setPlaybackRate(1.25)
+    expect(second.value.setPlaybackRate).toHaveBeenCalledWith(1.25)
   })
 
   it('parses shared SRT tracks and emits active cues', async () => {

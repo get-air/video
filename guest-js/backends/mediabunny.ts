@@ -102,6 +102,7 @@ class MediabunnyVideoController extends EventTarget implements BackendVideoContr
   #droppedFrames = 0
   #decodedFrameCopies = 0
   #renderStartedAt = 0
+  readonly #handleAbort = (): void => { void this.destroy().catch(() => undefined) }
 
   constructor(element: HTMLVideoElement, options: AttachVideoOptions, transport: HttpTransport) {
     super()
@@ -171,7 +172,7 @@ class MediabunnyVideoController extends EventTarget implements BackendVideoContr
 
     this.#installCanvas()
     await this.#configureSinks(source.startPositionSeconds ?? 0)
-    this.#options.signal?.addEventListener('abort', () => void this.destroy(), { once: true })
+    this.#options.signal?.addEventListener('abort', this.#handleAbort, { once: true })
     this.element.dispatchEvent(new Event('loadedmetadata'))
     this.element.dispatchEvent(new Event('durationchange'))
     this.element.dispatchEvent(new Event('canplay'))
@@ -189,8 +190,10 @@ class MediabunnyVideoController extends EventTarget implements BackendVideoContr
     this.#playing = true
     await this.#configureSinks(this.#playbackTimeAtStart)
     const generation = this.#generation
-    void this.#runAudio(generation)
-    this.#animationFrame = requestAnimationFrame(() => void this.#render(generation))
+    void this.#runAudio(generation).catch((cause) => {
+      this.#failDetachedPlayback('audio-render', cause, generation)
+    })
+    this.#scheduleRender(generation)
     this.element.dispatchEvent(new Event('play'))
     this.element.dispatchEvent(new Event('playing'))
   }
@@ -203,6 +206,7 @@ class MediabunnyVideoController extends EventTarget implements BackendVideoContr
     void this.#stopIterators()
     this.#stopAudioNodes()
     if (this.#animationFrame !== undefined) cancelAnimationFrame(this.#animationFrame)
+    this.#animationFrame = undefined
     this.element.dispatchEvent(new Event('pause'))
   }
 
@@ -242,6 +246,14 @@ class MediabunnyVideoController extends EventTarget implements BackendVideoContr
   async setVolume(volume: number): Promise<void> {
     this.#volume = Math.min(1, Math.max(0, volume))
     for (const gain of this.#queuedAudioNodes.values()) gain.gain.value = this.#volume
+  }
+
+  async setPlaybackRate(_rate: number): Promise<void> {
+    throw new VideoFeatureUnavailableError({
+      backend: 'mediabunny',
+      feature: 'playbackRate',
+      message: 'MediaBunny playback-rate changes are not implemented by this scheduler',
+    })
   }
 
   async setVideoFit(mode: VideoFitMode): Promise<void> {
@@ -296,6 +308,7 @@ class MediabunnyVideoController extends EventTarget implements BackendVideoContr
   async destroy(): Promise<void> {
     if (this.#destroyed) return
     this.#destroyed = true
+    this.#options.signal?.removeEventListener('abort', this.#handleAbort)
     this.pause()
     await this.#stopIterators()
     this.#stopAudioNodes()
@@ -428,7 +441,38 @@ class MediabunnyVideoController extends EventTarget implements BackendVideoContr
       this.#draw(this.#currentFrame)
     }
     this.#emitTime()
-    this.#animationFrame = requestAnimationFrame(() => void this.#render(generation))
+    this.#scheduleRender(generation)
+  }
+
+  #scheduleRender(generation: number): void {
+    this.#animationFrame = requestAnimationFrame(() => {
+      void this.#render(generation).catch((cause) => {
+        this.#failDetachedPlayback('video-render', cause, generation)
+      })
+    })
+  }
+
+  #failDetachedPlayback(
+    stage: 'audio-render' | 'video-render',
+    cause: unknown,
+    generation: number,
+  ): void {
+    if (this.#destroyed || generation !== this.#generation) return
+    this.#playbackTimeAtStart = this.#playbackTime()
+    this.#playing = false
+    this.#generation += 1
+    void this.#stopIterators()
+    this.#stopAudioNodes()
+    if (this.#animationFrame !== undefined) cancelAnimationFrame(this.#animationFrame)
+    this.#animationFrame = undefined
+    this.element.dispatchEvent(new Event('pause'))
+    const message = cause instanceof Error ? cause.message : String(cause)
+    this.dispatchEvent(new CustomEvent('error', {
+      detail: {
+        code: `mediabunny-${stage}`,
+        message: `MediaBunny ${stage} failed: ${message}`,
+      },
+    }))
   }
 
   async #runAudio(generation: number): Promise<void> {
@@ -491,8 +535,8 @@ class MediabunnyVideoController extends EventTarget implements BackendVideoContr
     const audioIterator = this.#audioIterator
     this.#videoIterator = undefined
     this.#audioIterator = undefined
-    await videoIterator?.return(undefined).catch(() => undefined)
-    await audioIterator?.return(undefined).catch(() => undefined)
+    try { await videoIterator?.return(undefined) } catch { /* decoder iterator already failed */ }
+    try { await audioIterator?.return(undefined) } catch { /* decoder iterator already failed */ }
   }
 
   #stopAudioNodes(): void {

@@ -45,10 +45,12 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
   readonly #original: {
     src: string
     preload: string | null
+    playbackRate: number
     objectFit: string
     transform: string
   }
   #destroyed = false
+  readonly #handleAbort = (): void => { void this.destroy().catch(() => undefined) }
 
   constructor(element: HTMLVideoElement, options: AttachVideoOptions, backend: HtmlBackend) {
     super()
@@ -73,6 +75,7 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
     this.#original = {
       src: element.getAttribute('src') ?? '',
       preload: element.getAttribute('preload'),
+      playbackRate: element.playbackRate,
       objectFit: element.style.objectFit,
       transform: element.style.transform,
     }
@@ -113,7 +116,7 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
       this.element.currentTime = Math.max(0, source.startPositionSeconds)
     }
     if (this.#options.autoplay) await this.play()
-    this.#options.signal?.addEventListener('abort', () => void this.destroy(), { once: true })
+    this.#options.signal?.addEventListener('abort', this.#handleAbort, { once: true })
   }
 
   async play(): Promise<void> { await this.element.play() }
@@ -143,11 +146,29 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
     this.element.volume = Math.min(1, Math.max(0, volume))
   }
 
+  async setPlaybackRate(rate: number): Promise<void> {
+    if (!this.capabilities.playbackRate) {
+      throw new VideoFeatureUnavailableError({
+        backend: this.#backend,
+        feature: 'playbackRate',
+        message: `${this.#backend} does not expose portable playback-rate changes`,
+      })
+    }
+    this.element.playbackRate = rate
+  }
+
   async setVideoFit(mode: VideoFitMode): Promise<void> {
     this.element.style.objectFit = mode === 'fit' ? 'contain' : mode === 'cover' ? 'cover' : 'fill'
   }
 
   async setVideoZoom(scale: number): Promise<void> {
+    if (!this.capabilities.videoZoom) {
+      throw new VideoFeatureUnavailableError({
+        backend: this.#backend,
+        feature: 'videoZoom',
+        message: `${this.#backend} does not expose portable video-surface zoom`,
+      })
+    }
     this.element.style.transform = `scale(${Math.max(0.01, scale)})`
   }
 
@@ -189,11 +210,13 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
   async destroy(): Promise<void> {
     if (this.#destroyed) return
     this.#destroyed = true
+    this.#options.signal?.removeEventListener('abort', this.#handleAbort)
     this.element.pause()
     for (const [type, listener] of this.#listeners) this.element.removeEventListener(type, listener)
     this.#listeners.length = 0
     this.element.style.objectFit = this.#original.objectFit
     this.element.style.transform = this.#original.transform
+    this.element.playbackRate = this.#original.playbackRate
     if (this.#original.src) this.element.setAttribute('src', this.#original.src)
     else this.element.removeAttribute('src')
     if (this.#original.preload === null) this.element.removeAttribute('preload')

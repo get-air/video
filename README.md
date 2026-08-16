@@ -57,7 +57,7 @@ The MediaBunny release gate generates and plays a real 3840×2160 H.264/AAC MKV,
 then verifies:
 
 - the selected track and backing canvas are 3840×2160;
-- sustained 30 FPS playback within the release thresholds;
+- sustained playback at the configured source cadence and release thresholds;
 - zero extra decoded-frame copies in the DOM path;
 - partial HTTP range requests;
 - seek and stable-controller reload;
@@ -119,6 +119,11 @@ origins in the application CSP. Air creates and removes Samsung's required
 `application/avplayer` object internally; the public `<video>` remains the
 stable geometry anchor. AVPlay's display plane is mapped from that anchor to
 Samsung's fixed 1920×1080 coordinate space.
+
+AVPlay is a singleton, so Air permits one active Tizen controller at a time.
+Tizen maps the dedicated `VideoSource.cookies` and `VideoSource.userAgent`
+fields to AVPlay streaming properties; arbitrary request headers remain
+unsupported.
 
 ## Shared transport and subtitles
 

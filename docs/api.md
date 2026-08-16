@@ -87,6 +87,7 @@ interface VideoController {
   seek(positionSeconds: number): Promise<void>
   selectTrack(kind: TrackKind, trackId?: string): Promise<void>
   setVolume(volume: number): Promise<void>
+  setPlaybackRate(rate: number): Promise<void>
   setVideoFit(mode: 'fit' | 'cover' | 'stretch'): Promise<void>
   setVideoZoom(scale: number): Promise<void>
   stats(): Promise<SessionStats>
@@ -120,6 +121,13 @@ If opening the replacement fails, other operations report a typed
 `PlayerCapabilities` reports the active backend, container/codec policy, HDR,
 rate, volume, fit/zoom, track selection, custom headers, and frame-accurate
 seeking. `'platform'` means the runtime/decoder decides.
+
+`playbackRate: true` means `setPlaybackRate` delegates to the active backend;
+the platform may still reject a particular rate. `customHeaders` refers to the
+arbitrary `VideoSource.headers` map. A backend can support dedicated source
+properties without claiming arbitrary headers—for example, Tizen maps
+`cookies` and `userAgent` to AVPlay streaming properties while leaving
+`customHeaders: false`.
 
 ## Effect entrypoint
 

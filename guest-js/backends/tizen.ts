@@ -45,6 +45,7 @@ interface AvPlayApi {
   getCurrentTime(): number
   getTotalTrackInfo(): AvPlayTrackInfo[]
   getCurrentStreamInfo(): AvPlayTrackInfo[]
+  setStreamingProperty(type: 'COOKIE' | 'USER_AGENT', value: string): void
   setSilentSubtitle(onoff: boolean): void
   setSelectTrack(type: 'AUDIO' | 'TEXT', index: number): void
   setDisplayRect(x: number, y: number, width: number, height: number): void
@@ -59,6 +60,7 @@ declare global {
 }
 
 let tizenSessionSequence = 0
+let tizenAvPlayOwner: symbol | undefined
 
 const AVPLAY_DISPLAY_WIDTH = 1920
 const AVPLAY_DISPLAY_HEIGHT = 1080
@@ -95,7 +97,7 @@ class TizenVideoController extends EventTarget implements BackendVideoController
     backend: 'tizen',
     containers: 'platform',
     codecs: 'platform',
-    drm: 'platform',
+    drm: false,
     hdr: 'platform',
     playbackRate: false,
     volume: false,
@@ -110,12 +112,16 @@ class TizenVideoController extends EventTarget implements BackendVideoController
   readonly #avplay: AvPlayApi
   readonly #media: MediaInfo = { seekable: true, live: false, tracks: [], chapters: [] }
   readonly #originalVisibility: string
+  readonly #ownerToken = Symbol('air-tizen-avplay-owner')
   #resize?: ResizeObserver
   #playerObject?: HTMLObjectElement
+  #ownsAvPlay = false
+  #opened = false
   #hasTotalTrackInfo = false
   #destroyed = false
   #currentTime = 0
   #playing = false
+  readonly #handleAbort = (): void => { void this.destroy().catch(() => undefined) }
 
   constructor(element: HTMLVideoElement, options: AttachVideoOptions, avplay: AvPlayApi) {
     super()
@@ -131,16 +137,20 @@ class TizenVideoController extends EventTarget implements BackendVideoController
   async start(): Promise<void> {
     if (this.#options.signal?.aborted) throw this.#options.signal.reason
     const source = normalizeSource(this.#options.source)
-    if (source.headers || source.cookies || source.userAgent || source.referrer || source.tlsCaFile) {
+    if (source.headers || source.referrer || source.tlsCaFile) {
       throw new VideoFeatureUnavailableError({
         backend: 'tizen',
         feature: 'customHeaders',
-        message: 'Samsung AVPlay does not provide a portable arbitrary-request-header API',
+        message: 'Samsung AVPlay does not provide portable arbitrary headers, referrer, or TLS CA overrides',
       })
     }
+    this.#acquireAvPlay()
     this.#installPlayerObject()
     this.element.style.visibility = 'hidden'
     this.#avplay.open(source.uri)
+    this.#opened = true
+    if (source.cookies !== undefined) this.#avplay.setStreamingProperty('COOKIE', source.cookies)
+    if (source.userAgent !== undefined) this.#avplay.setStreamingProperty('USER_AGENT', source.userAgent)
     this.#avplay.setListener({
       onbufferingprogress: () => {
         this.dispatchEvent(new CustomEvent('bufferprogress', {
@@ -177,7 +187,7 @@ class TizenVideoController extends EventTarget implements BackendVideoController
     }
     window.addEventListener('resize', this.#handleResize)
     window.addEventListener('scroll', this.#handleResize, true)
-    this.#options.signal?.addEventListener('abort', () => void this.destroy(), { once: true })
+    this.#options.signal?.addEventListener('abort', this.#handleAbort, { once: true })
     this.element.dispatchEvent(new Event('loadedmetadata'))
     this.element.dispatchEvent(new Event('durationchange'))
     this.element.dispatchEvent(new Event('canplay'))
@@ -242,6 +252,14 @@ class TizenVideoController extends EventTarget implements BackendVideoController
   }
 
   async setVolume(_volume: number): Promise<void> {}
+
+  async setPlaybackRate(_rate: number): Promise<void> {
+    throw new VideoFeatureUnavailableError({
+      backend: 'tizen',
+      feature: 'playbackRate',
+      message: 'The common Tizen backend does not expose AVPlay trick-play speeds',
+    })
+  }
 
   async setVideoFit(mode: VideoFitMode): Promise<void> {
     const method = mode === 'fit'
@@ -335,19 +353,24 @@ class TizenVideoController extends EventTarget implements BackendVideoController
   async destroy(): Promise<void> {
     if (this.#destroyed) return
     this.#destroyed = true
+    this.#options.signal?.removeEventListener('abort', this.#handleAbort)
     this.#resize?.disconnect()
     window.removeEventListener('resize', this.#handleResize)
     window.removeEventListener('scroll', this.#handleResize, true)
     try {
-      const state = this.#avplay.getState()
-      if (state === 'PLAYING' || state === 'PAUSED' || state === 'READY') this.#avplay.stop()
+      if (this.#ownsAvPlay && this.#opened) {
+        const state = this.#avplay.getState()
+        if (state === 'PLAYING' || state === 'PAUSED' || state === 'READY') this.#avplay.stop()
+      }
     } finally {
       try {
-        this.#avplay.close()
+        if (this.#ownsAvPlay && this.#opened) this.#avplay.close()
       } finally {
+        this.#opened = false
         this.#playerObject?.remove()
         this.#playerObject = undefined
         this.element.style.visibility = this.#originalVisibility
+        this.#releaseAvPlay()
       }
     }
   }
@@ -363,6 +386,23 @@ class TizenVideoController extends EventTarget implements BackendVideoController
   }
 
   readonly #handleResize = (): void => this.refreshLayout()
+
+  #acquireAvPlay(): void {
+    if (tizenAvPlayOwner !== undefined) {
+      throw new VideoBackendUnavailableError({
+        backend: 'tizen',
+        message: 'Samsung AVPlay already has an active Air video controller',
+      })
+    }
+    tizenAvPlayOwner = this.#ownerToken
+    this.#ownsAvPlay = true
+  }
+
+  #releaseAvPlay(): void {
+    if (!this.#ownsAvPlay) return
+    if (tizenAvPlayOwner === this.#ownerToken) tizenAvPlayOwner = undefined
+    this.#ownsAvPlay = false
+  }
 
   #installPlayerObject(): void {
     const parent = this.element.parentElement

@@ -149,6 +149,13 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
     ),
   )
 
+  readonly setPlaybackRateEffect = Effect.fn('SwitchingVideoController.setPlaybackRate')(
+    (rate: number) => this.#tryPromise(
+      'set playback rate',
+      (active) => active.setPlaybackRate(rate),
+    ),
+  )
+
   readonly setVideoFitEffect = Effect.fn('SwitchingVideoController.setVideoFit')(
     (mode: VideoFitMode) => this.#tryPromise(
       'set video fit',
@@ -193,6 +200,9 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
   }
   setVolume(volume: number): Promise<void> {
     return runVideoEffectPromise(this.setVolumeEffect(volume))
+  }
+  setPlaybackRate(rate: number): Promise<void> {
+    return runVideoEffectPromise(this.setPlaybackRateEffect(rate))
   }
   setVideoFit(mode: VideoFitMode): Promise<void> {
     return runVideoEffectPromise(this.setVideoFitEffect(mode))

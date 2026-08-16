@@ -46,6 +46,7 @@ function fakeBackend(element: HTMLVideoElement, sequence: number): BackendVideoC
     seek: vi.fn(async () => undefined),
     selectTrack: vi.fn(async () => undefined),
     setVolume: vi.fn(async () => undefined),
+    setPlaybackRate: vi.fn(async () => undefined),
     setVideoFit: vi.fn(async () => undefined),
     setVideoZoom: vi.fn(async () => undefined),
     stats: vi.fn(async () => ({ sessionId: `native-${sequence}`,
@@ -285,6 +286,7 @@ describe('external backend adapters', () => {
     await Effect.runPromise(controller.load('two.mkv'))
     expect(await Effect.runPromise(controller.sessionId)).toBe('native-2')
     await Effect.runPromise(controller.play())
+    await Effect.runPromise(controller.setPlaybackRate(1.25))
     await Effect.runPromise(controller.destroy())
     expect(adapter.open).toHaveBeenCalledTimes(2)
   })

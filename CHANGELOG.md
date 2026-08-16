@@ -8,3 +8,5 @@
 - Add React, canvas, SolidTV, and Blits integrations.
 - Add shared SRT/WebVTT subtitle handling and Request-based transport injection.
 - Add deterministic 4K browser qualification and release evidence.
+- Add controller playback-rate support for HTML and Vizio media elements.
+- Add guarded Tizen AVPlay ownership and dedicated cookie/User-Agent streaming properties.

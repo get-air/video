@@ -181,6 +181,7 @@ export interface VideoController extends EventTarget {
   seek(positionSeconds: number): Promise<void>
   selectTrack(kind: TrackKind, trackId?: string): Promise<void>
   setVolume(volume: number): Promise<void>
+  setPlaybackRate(rate: number): Promise<void>
   setVideoFit(mode: VideoFitMode): Promise<void>
   setVideoZoom(scale: number): Promise<void>
   stats(): Promise<SessionStats>

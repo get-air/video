@@ -58,6 +58,7 @@ export interface EffectVideoController {
   seek(positionSeconds: number): Effect.Effect<void, VideoPlayerError>
   selectTrack(kind: TrackKind, trackId?: string): Effect.Effect<void, VideoPlayerError>
   setVolume(volume: number): Effect.Effect<void, VideoPlayerError>
+  setPlaybackRate(rate: number): Effect.Effect<void, VideoPlayerError>
   setVideoFit(mode: VideoFitMode): Effect.Effect<void, VideoPlayerError>
   setVideoZoom(scale: number): Effect.Effect<void, VideoPlayerError>
   stats(): Effect.Effect<SessionStats, VideoPlayerError>
@@ -452,6 +453,7 @@ function makeEffectVideoController(
     seek: (positionSeconds) => controller.seekEffect(positionSeconds),
     selectTrack: (kind, trackId) => controller.selectTrackEffect(kind, trackId),
     setVolume: (volume) => controller.setVolumeEffect(volume),
+    setPlaybackRate: (rate) => controller.setPlaybackRateEffect(rate),
     setVideoFit: (mode) => controller.setVideoFitEffect(mode),
     setVideoZoom: (scale) => controller.setVideoZoomEffect(scale),
     stats: () => controller.statsEffect(),
