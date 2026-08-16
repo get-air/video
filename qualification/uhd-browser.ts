@@ -190,7 +190,7 @@ function assertUhdState(value: Snapshot, phase: string): void {
   assert(value.canvas?.left === 180 && value.canvas.top === 120
     && value.canvas.cssWidth === 1560 && value.canvas.cssHeight === 780,
   `${phase}: canvas geometry is ${JSON.stringify(value.canvas)}`)
-  assert(value.videoElements === 1 && value.canvasElements === 2,
+  assert(value.videoElements === 1 && value.canvasElements === 1,
     `${phase}: leaked DOM layers (video=${value.videoElements}, canvas=${value.canvasElements})`)
   assert(value.stats?.decodedFrameCopies === 0,
     `${phase}: expected direct DOM canvas presentation, received ${value.stats?.decodedFrameCopies} copies`)

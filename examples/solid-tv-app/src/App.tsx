@@ -9,53 +9,17 @@ import {
 
 const videoRect: SolidVideoRect = { x: 180, y: 120, width: 1560, height: 780 }
 
-interface QualificationSnapshot {
-  readonly ready: boolean
-  readonly error?: string
-  readonly sessionId?: string
-  readonly backend?: string
-  readonly media?: unknown
-  readonly tracks?: unknown
-  readonly quality?: unknown
-  readonly stats?: unknown
-  readonly canvas?: {
-    readonly width: number
-    readonly height: number
-    readonly left: number
-    readonly top: number
-    readonly cssWidth: number
-    readonly cssHeight: number
-  }
-  readonly videoElements: number
-  readonly canvasElements: number
-}
-
-interface QualificationBridge {
-  snapshot(): Promise<QualificationSnapshot>
-  reload(source: string): Promise<void>
-  seek(positionSeconds: number): Promise<void>
-}
-
-declare global {
-  interface Window {
-    __AIR_VIDEO_QUALIFICATION__?: QualificationBridge
-  }
-}
-
 export function App(props: { renderer: SolidRendererLike }) {
   const parameters = new URLSearchParams(window.location.search)
-  const qualification = parameters.has('qualification')
   const [source, setSource] = createSignal(parameters.get('source') ?? '/sample.mkv')
-  const [backends, setBackends] = createSignal<readonly VideoBackend[]>(qualification
-    ? ['mediabunny']
-    : ['mediabunny', 'html'])
+  const [backends, setBackends] = createSignal<readonly VideoBackend[]>(['mediabunny', 'html'])
   const video = createSolidVideo(() => ({
     renderer: props.renderer,
     rect: videoRect,
     source: source(),
     backend: backends(),
     autoplay: true,
-    subtitles: qualification ? [] : [{
+    subtitles: [{
       id: 'english',
       src: '/sample.en.vtt',
       label: 'English',
@@ -63,51 +27,6 @@ export function App(props: { renderer: SolidRendererLike }) {
       default: true,
     }],
   }))
-
-  if (qualification) {
-    window.__AIR_VIDEO_QUALIFICATION__ = {
-      snapshot: async () => {
-        const controller = video.controller()
-        const mediaCanvas = [...document.querySelectorAll('canvas')]
-          .find((canvas) => canvas !== props.renderer.canvas)
-        const bounds = mediaCanvas?.getBoundingClientRect()
-        const cause = video.error()
-        return {
-          ready: Boolean(controller) && !video.loading(),
-          error: cause instanceof Error
-            ? cause.message
-            : cause === undefined ? undefined : String(cause),
-          sessionId: controller?.sessionId,
-          backend: controller?.capabilities.backend,
-          media: controller?.media,
-          tracks: controller?.tracks,
-          quality: controller?.playbackQuality(),
-          stats: controller ? await controller.stats() : undefined,
-          canvas: mediaCanvas && bounds ? {
-            width: mediaCanvas.width,
-            height: mediaCanvas.height,
-            left: bounds.left,
-            top: bounds.top,
-            cssWidth: bounds.width,
-            cssHeight: bounds.height,
-          } : undefined,
-          videoElements: document.querySelectorAll('video').length,
-          canvasElements: document.querySelectorAll('canvas').length,
-        }
-      },
-      reload: async (nextSource) => {
-        const controller = video.controller()
-        if (!controller) throw new Error('Video controller is not ready')
-        await controller.load(nextSource, { backend: ['mediabunny'], autoplay: true })
-      },
-      seek: async (positionSeconds) => {
-        const controller = video.controller()
-        if (!controller) throw new Error('Video controller is not ready')
-        await controller.seek(positionSeconds)
-      },
-    }
-    onCleanup(() => { delete window.__AIR_VIDEO_QUALIFICATION__ })
-  }
 
   const keydown = (event: KeyboardEvent) => {
     if (event.key === '1') setBackends(['mediabunny', 'html'])

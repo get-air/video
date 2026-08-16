@@ -6,7 +6,8 @@ The runner:
 
 1. generates an ignored 3840×2160 H.264/AAC Matroska fixture with FFmpeg;
 2. starts a CORS-enabled HTTP range server;
-3. starts the real SolidTV example;
+3. starts the example application's minimal DOM qualification route, without
+   a competing WebGL render loop;
 4. launches headless Chrome/Chromium with WebCodecs;
 5. verifies decoded dimensions, cadence, drops, direct canvas presentation,
    geometry, range loading, seek, reload, and DOM-layer cleanup invariants;
