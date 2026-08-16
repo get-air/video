@@ -34,6 +34,10 @@ jobs:
         working-directory: examples/solid-tv-app
       - run: npm run build
         working-directory: examples/solid-tv-app
+      - name: Install 4K fixture encoder
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ffmpeg
       - name: Qualify release 4K30 MediaBunny playback
         env:
           AIR_UHD_SOURCE_FPS: 30
