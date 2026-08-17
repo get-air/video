@@ -9,5 +9,7 @@ export default defineConfig({
       builtIns: [],
     },
   })],
-  build: { target: 'es2022' },
+  build: { target: 'es2018' },
+  server: { host: '0.0.0.0' },
+  preview: { host: '0.0.0.0' },
 })
