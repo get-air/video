@@ -49,7 +49,7 @@ jobs:
         working-directory: examples/solid-tv-app
       - name: Install 4K fixture encoder
         if: ${{ env.ACT != 'true' }}
-        run: ffmpeg -version
+        run: sudo apt-get install --yes ffmpeg
       - name: Qualify 4K MediaBunny playback
         if: ${{ env.ACT != 'true' }}
         env:
