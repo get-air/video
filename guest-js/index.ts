@@ -7,6 +7,23 @@ export type DeviceProfile = 'auto' | 'mobile' | 'tv' | 'desktop'
 export type BuiltInVideoBackend = 'mediabunny' | 'html' | 'tizen' | 'webos' | 'vizio'
 export type VideoBackendId = BuiltInVideoBackend | (string & {})
 export type VideoBackend = 'auto' | VideoBackendId
+export type VideoRouteKind = 'html' | 'native' | 'client' | 'transcode'
+export type VideoRoutingPhase = 'probing' | 'unavailable' | 'opening' | 'selected' | 'failed'
+
+export interface VideoRoutingAttempt {
+  readonly backend: VideoBackendId
+  readonly route: VideoRouteKind
+  readonly phase: VideoRoutingPhase
+  readonly elapsedMs: number
+  readonly message?: string
+}
+
+export interface VideoRoutingOptions {
+  /** Route groups attempted for `backend: "auto"`. Defaults to HTML, native, client, transcode. */
+  readonly order?: readonly VideoRouteKind[]
+  /** Diagnostic hook for backend probes, failures, and the selected route. */
+  readonly onAttempt?: (attempt: VideoRoutingAttempt) => void
+}
 
 export interface VideoSource {
   uri: string
@@ -114,11 +131,12 @@ export type VideoBackendOptions = Partial<VideoBackendOptionsMap>
 
 export interface AttachVideoOptions {
   source: string | VideoSource
-  /** One backend ID or an ordered fallback chain. MediaBunny is opt-in. */
+  /** One backend ID or an ordered fallback chain. `auto` uses `routing.order`. */
   backend?: VideoBackend | readonly VideoBackend[]
   /** Additional ordered fallbacks after `backend`. */
   fallbackBackends?: readonly VideoBackend[]
   backendOptions?: VideoBackendOptions
+  routing?: VideoRoutingOptions
   /** Per-attachment override for the client's Request-based transport. */
   http?: HttpTransport
   surfaceMode?: 'dom' | 'transparent-canvas'
@@ -262,6 +280,8 @@ export interface VideoBackendOpenContext {
 /** Explicit extension seam used by platform packages such as `@get-air/video-tauri`. */
 export interface VideoBackendAdapter {
   readonly id: VideoBackendId
+  /** Playback route used to order adapters when `backend` is `auto`. */
+  readonly route?: VideoRouteKind
   /** Higher values are attempted first for `backend: 'auto'`. Omit for explicit-only adapters. */
   readonly autoPriority?: number
   isAvailable(context: VideoRuntimeContext): boolean | Promise<boolean>

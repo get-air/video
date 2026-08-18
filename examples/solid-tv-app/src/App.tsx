@@ -16,7 +16,6 @@ import type {
 } from '@get-air/video'
 import {
   createSolidVideo,
-  solidVideoHole,
   type SolidRendererLike,
   type SolidVideoRect,
 } from '@get-air/video/solid'
@@ -27,15 +26,15 @@ const CONTENT_WIDTH = SCREEN.width - SAFE_X * 2
 const videoRect: SolidVideoRect = { x: SAFE_X, y: 96, width: CONTENT_WIDTH, height: 744 }
 
 const COLOR = {
-  ink: '#000000ff',
-  panel: '#11171cff',
-  surface: '#1d252cff',
-  focus: '#25c7d9ff',
-  chalk: '#f4f7f8ff',
-  muted: '#b7c0c6ff',
-  dim: '#7f8a92ff',
-  amber: '#f3c766ff',
-  error: '#ff6b6bff',
+  ink: 0x000000ff,
+  panel: 0x11171cff,
+  surface: 0x1d252cff,
+  focus: 0x25c7d9ff,
+  chalk: 0xf4f7f8ff,
+  muted: 0xb7c0c6ff,
+  dim: 0x7f8a92ff,
+  amber: 0xf3c766ff,
+  error: 0xff6b6bff,
 } as const
 
 type Command = 'toggle' | 'rewind' | 'forward' | 'audio' | 'subtitle' | 'fit'
@@ -74,7 +73,7 @@ function ControlButton(props: {
       height={76}
       color={focused() ? COLOR.focus : COLOR.panel}
       borderRadius={2}
-      border={{ width: focused() ? 3 : 1, color: focused() ? COLOR.chalk : '#ffffff24' }}
+      border={{ width: focused() ? 3 : 1, color: focused() ? COLOR.chalk : 0xffffff24 }}
       autofocus={props.autofocus}
       onFocusChanged={(hasFocus) => {
         setFocused(hasFocus)
@@ -90,7 +89,7 @@ function ControlButton(props: {
         y={props.value ? 12 : 22}
         width={props.width - 40}
         height={30}
-        fontFamily="Arial"
+        fontFamily="sans-serif"
         fontSize={props.value ? 19 : 25}
         fontWeight={700}
         color={focused() ? COLOR.ink : COLOR.chalk}
@@ -104,9 +103,9 @@ function ControlButton(props: {
           y={40}
           width={props.width - 40}
           height={24}
-          fontFamily="Arial"
+          fontFamily="sans-serif"
           fontSize={18}
-          color={focused() ? '#0b3c43ff' : COLOR.muted}
+          color={focused() ? 0x0b3c43ff : COLOR.muted}
           maxLines={1}
         >
           {props.value()}
@@ -408,15 +407,28 @@ export function App(props: { renderer: SolidRendererLike }) {
     <view
       width={SCREEN.width}
       height={SCREEN.height}
-      color={COLOR.ink}
-      effects={{ holePunch: solidVideoHole(videoRect, 0) }}
     >
+      <view x={0} y={0} width={SCREEN.width} height={videoRect.y} color={COLOR.ink} />
+      <view
+        x={0}
+        y={videoRect.y}
+        width={videoRect.x}
+        height={videoRect.height}
+        color={COLOR.ink}
+      />
+      <view
+        x={videoRect.x + videoRect.width}
+        y={videoRect.y}
+        width={SCREEN.width - videoRect.x - videoRect.width}
+        height={videoRect.height}
+        color={COLOR.ink}
+      />
       <text
         x={SAFE_X}
         y={28}
         width={900}
         height={44}
-        fontFamily="Arial"
+        fontFamily="sans-serif"
         fontSize={32}
         fontWeight={700}
         color={COLOR.chalk}
@@ -429,7 +441,7 @@ export function App(props: { renderer: SolidRendererLike }) {
         y={36}
         width={530}
         height={30}
-        fontFamily="Arial"
+        fontFamily="sans-serif"
         fontSize={20}
         textAlign="right"
         contain="both"
@@ -440,13 +452,13 @@ export function App(props: { renderer: SolidRendererLike }) {
       </text>
 
       {video.subtitleCues().length > 0 && (
-        <view x={250} y={738} width={1420} height={82} color="#000000d9" borderRadius={2}>
+        <view x={250} y={738} width={1420} height={82} color={0x000000d9} borderRadius={2}>
           <text
             x={32}
             y={18}
             width={1356}
             height={52}
-            fontFamily="Arial"
+            fontFamily="sans-serif"
             fontSize={32}
             fontWeight={700}
             textAlign="center"
@@ -468,7 +480,7 @@ export function App(props: { renderer: SolidRendererLike }) {
           y={40}
           width={300}
           height={30}
-          fontFamily="Arial"
+          fontFamily="sans-serif"
           fontSize={21}
           color={COLOR.chalk}
         >
@@ -479,7 +491,7 @@ export function App(props: { renderer: SolidRendererLike }) {
           y={40}
           width={300}
           height={30}
-          fontFamily="Arial"
+          fontFamily="sans-serif"
           fontSize={21}
           textAlign="right"
           contain="both"
@@ -493,7 +505,7 @@ export function App(props: { renderer: SolidRendererLike }) {
           y={40}
           width={400}
           height={30}
-          fontFamily="Arial"
+          fontFamily="sans-serif"
           fontSize={18}
           textAlign="center"
           contain="both"
@@ -531,7 +543,7 @@ export function App(props: { renderer: SolidRendererLike }) {
           y={150}
           width={CONTENT_WIDTH}
           height={30}
-          fontFamily="Arial"
+          fontFamily="sans-serif"
           fontSize={20}
           color={statusKind() === 'error' ? COLOR.error : statusKind() === 'warning' ? COLOR.amber : COLOR.dim}
           maxLines={1}

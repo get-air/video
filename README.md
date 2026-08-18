@@ -8,15 +8,32 @@ platforms plug into its backend contract, so applications keep one API.
 | Runtime | Backend | Playback path | Selection |
 | --- | --- | --- | --- |
 | Browser | `html` | `<video>` | Automatic |
-| Browser | `mediabunny` | MediaBunny → WebCodecs → DOM canvas | Explicit |
+| Browser | `mediabunny` | MediaBunny → WebCodecs → DOM canvas | Automatic when installed and decodable |
 | Samsung Tizen | `tizen` | AVPlay | Automatic when available |
 | LG webOS | `webos` | Platform `<video>` pipeline | Automatic when detected |
 | Vizio SmartCast | `vizio` | Platform `<video>` pipeline | Automatic when detected |
 
 MediaBunny renders directly in the DOM and never passes decoded frames through
-Tauri or another native bridge. It is lazy-loaded only when requested.
+Tauri or another native bridge. It is an optional dependency and lazy-loaded
+only after faster route groups fail.
 
-`auto` prefers the detected TV backend, then HTML; it never selects MediaBunny.
+`auto` proves routes in this order: HTML, native/platform adapters, optional
+client decoding, then transcoding adapters. HTML startup must reach metadata;
+MediaBunny must find a decodable track for every present audio/video kind, so a
+video-only success cannot silently discard unsupported audio. Applications can
+override route groups and observe every attempt:
+
+```ts
+const attempts = []
+const player = await attachVideo(video, {
+  source,
+  routing: {
+    order: ['html', 'native', 'client', 'transcode'],
+    onAttempt: (attempt) => attempts.push(attempt),
+  },
+})
+```
+
 Codec support comes from the runtime's WebCodecs or platform decoder. webOS and
 Vizio are HTML-backed integrations, not vendor-certified native adapters.
 
@@ -25,6 +42,28 @@ Tauri plugs into that same controller instead of replacing it:
 `@get-air/video` →
 [`@get-air/video-tauri`](https://github.com/get-air/tauri-video-plugin)
 (`tauri` backend) → `tauri-plugin-video` (Rust/native engines)
+
+The standalone GStreamer fallback plugs into the same registry. It stays last
+under `auto`, so compatible sources never pay proxy or transcoding cost:
+
+```ts
+import { createVideoClient } from '@get-air/video'
+import { TranscodeClient } from '@get-air/transcode'
+import { transcodeVideoBackend } from '@get-air/transcode/video'
+
+const transcode = await TranscodeClient.connect({ origin: embeddedOrigin })
+const client = createVideoClient({
+  adapters: [transcodeVideoBackend({ client: transcode })],
+})
+
+const player = await client.attach(video, { source, backend: 'auto' })
+```
+
+On Tauri, register both `tauriVideoBackend()` and
+`transcodeVideoBackend()`: HTML is proven first, native Tauri is next for local
+performance, optional client decoding follows, and GStreamer is the final
+fallback. Vizio casting uses the embedded host's tokenized LAN HLS URL rather
+than the local native surface.
 
 ## Install
 
@@ -39,7 +78,7 @@ import { attachVideo } from '@get-air/video'
 
 const player = await attachVideo(document.querySelector('video')!, {
   source: 'https://media.example/movie.mkv',
-  backend: ['mediabunny', 'html'],
+  backend: 'auto',
   autoplay: true,
 })
 

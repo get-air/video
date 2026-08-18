@@ -157,7 +157,12 @@ class MediabunnyVideoController extends EventTarget implements BackendVideoContr
     const audioTracks = await this.#input.getAudioTracks()
     this.#videoTrack = await this.#firstDecodable(videoTracks)
     this.#audioTrack = await this.#firstDecodable(audioTracks)
-    assertPlayableTracks(videoTracks.length > 0, Boolean(this.#videoTrack), Boolean(this.#audioTrack))
+    assertPlayableTracks(
+      videoTracks.length > 0,
+      audioTracks.length > 0,
+      Boolean(this.#videoTrack),
+      Boolean(this.#audioTrack),
+    )
     this.#selectMediaTracks()
     const primaryTrack = this.#videoTrack ?? this.#audioTrack
     this.#media.live = primaryTrack ? await primaryTrack.isLive() : false
@@ -554,6 +559,7 @@ function normalizeSource(source: string | VideoSource): VideoSource {
 /** @internal Guards fallback semantics before a MediaBunny session is accepted. */
 export function assertPlayableTracks(
   hasVideoTracks: boolean,
+  hasAudioTracks: boolean,
   hasDecodableVideo: boolean,
   hasDecodableAudio: boolean,
 ): void {
@@ -561,6 +567,12 @@ export function assertPlayableTracks(
     throw new VideoBackendUnavailableError({
       backend: 'mediabunny',
       message: 'This source contains video, but no video track can be decoded by WebCodecs',
+    })
+  }
+  if (hasAudioTracks && !hasDecodableAudio) {
+    throw new VideoBackendUnavailableError({
+      backend: 'mediabunny',
+      message: 'This source contains audio, but no audio track can be decoded by WebCodecs',
     })
   }
   if (!hasDecodableVideo && !hasDecodableAudio) {

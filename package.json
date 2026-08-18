@@ -92,7 +92,9 @@
     "@get-air/http": "^0.1.0",
     "@noriginmedia/norigin-spatial-navigation": "^3.3.0",
     "@plussub/srt-vtt-parser": "^2.0.5",
-    "effect": "^3.22.1",
+    "effect": "^3.22.1"
+  },
+  "optionalDependencies": {
     "mediabunny": "^1.54.0"
   },
   "peerDependencies": {

@@ -30,6 +30,8 @@ import type {
   VideoFitMode,
   VideoLoadOptions,
   VideoRuntimeContext,
+  VideoRouteKind,
+  VideoRoutingAttempt,
   VideoSource,
 } from './index'
 import {
@@ -173,6 +175,14 @@ const attachWithFallback = Effect.fn('VideoPlayerService.attachWithFallback')(
     const candidates = resolveAdapters(options, adapters)
     let lastError: VideoPlayerError | undefined
     for (const adapter of candidates) {
+      const route = adapterRoute(adapter)
+      const startedAt = yield* Effect.sync(monotonicNow)
+      yield* Effect.sync(() => reportRoutingAttempt(options, {
+        backend: adapter.id,
+        route,
+        phase: 'probing',
+        elapsedMs: 0,
+      }))
       if (options.signal?.aborted) {
         return yield* attachmentAborted(adapter.id, options.signal)
       }
@@ -192,6 +202,13 @@ const attachWithFallback = Effect.fn('VideoPlayerService.attachWithFallback')(
       }
       if (availability._tag === 'Left') {
         lastError = availability.left
+        yield* Effect.sync(() => reportRoutingAttempt(options, {
+          backend: adapter.id,
+          route,
+          phase: 'failed',
+          elapsedMs: monotonicNow() - startedAt,
+          message: availability.left.message,
+        }))
         continue
       }
       if (!availability.right) {
@@ -199,8 +216,21 @@ const attachWithFallback = Effect.fn('VideoPlayerService.attachWithFallback')(
           backend: adapter.id,
           message: `Video backend ${adapter.id} is not available in this runtime`,
         })
+        yield* Effect.sync(() => reportRoutingAttempt(options, {
+          backend: adapter.id,
+          route,
+          phase: 'unavailable',
+          elapsedMs: monotonicNow() - startedAt,
+          message: lastError?.message,
+        }))
         continue
       }
+      yield* Effect.sync(() => reportRoutingAttempt(options, {
+        backend: adapter.id,
+        route,
+        phase: 'opening',
+        elapsedMs: monotonicNow() - startedAt,
+      }))
       const result = yield* Effect.either(Effect.tryPromise({
         try: () => abortableOperation(
           options.signal,
@@ -209,11 +239,26 @@ const attachWithFallback = Effect.fn('VideoPlayerService.attachWithFallback')(
         ),
         catch: (cause) => normalizePlayerError(adapter.id, cause),
       }))
-      if (result._tag === 'Right') return result.right
+      if (result._tag === 'Right') {
+        yield* Effect.sync(() => reportRoutingAttempt(options, {
+          backend: adapter.id,
+          route,
+          phase: 'selected',
+          elapsedMs: monotonicNow() - startedAt,
+        }))
+        return result.right
+      }
       if (options.signal?.aborted) {
         return yield* attachmentAborted(adapter.id, options.signal)
       }
       lastError = result.left
+      yield* Effect.sync(() => reportRoutingAttempt(options, {
+        backend: adapter.id,
+        route,
+        phase: 'failed',
+        elapsedMs: monotonicNow() - startedAt,
+        message: result.left.message,
+      }))
     }
     return yield* (lastError ?? new VideoBackendUnavailableError({
       backend: 'html',
@@ -232,7 +277,8 @@ function resolveAdapters(
     const choices = backend === 'auto'
       ? [...adapters]
         .filter((adapter) => adapter.autoPriority !== undefined)
-        .sort((left, right) => (right.autoPriority ?? 0) - (left.autoPriority ?? 0))
+        .filter((adapter) => routeOrder(options).includes(adapterRoute(adapter)))
+        .sort((left, right) => compareAutoAdapters(left, right, routeOrder(options)))
       : adapters.filter((adapter) => adapter.id === backend)
     if (choices.length === 0) {
       if (backend !== 'auto') {
@@ -246,6 +292,49 @@ function resolveAdapters(
     }
   }
   return resolved
+}
+
+export const defaultVideoRouteOrder: readonly VideoRouteKind[] = [
+  'html',
+  'native',
+  'client',
+  'transcode',
+]
+
+function routeOrder(options: AttachVideoOptions): readonly VideoRouteKind[] {
+  return [...new Set(options.routing?.order ?? defaultVideoRouteOrder)]
+}
+
+function adapterRoute(adapter: VideoBackendAdapter): VideoRouteKind {
+  if (adapter.route) return adapter.route
+  if (adapter.id === 'html' || adapter.id === 'webos' || adapter.id === 'vizio') return 'html'
+  if (adapter.id === 'mediabunny') return 'client'
+  if (adapter.id === 'transcode') return 'transcode'
+  return 'native'
+}
+
+function compareAutoAdapters(
+  left: VideoBackendAdapter,
+  right: VideoBackendAdapter,
+  order: readonly VideoRouteKind[],
+): number {
+  const routeDifference = order.indexOf(adapterRoute(left)) - order.indexOf(adapterRoute(right))
+  return routeDifference || (right.autoPriority ?? 0) - (left.autoPriority ?? 0)
+}
+
+function reportRoutingAttempt(
+  options: AttachVideoOptions,
+  attempt: VideoRoutingAttempt,
+): void {
+  try {
+    options.routing?.onAttempt?.(attempt)
+  } catch {
+    // Diagnostics must never affect playback selection.
+  }
+}
+
+function monotonicNow(): number {
+  return typeof performance === 'undefined' ? Date.now() : performance.now()
 }
 
 function unavailableAdapter(id: VideoBackendId, message: string): VideoBackendAdapter {
@@ -286,6 +375,8 @@ export function selectPlayerBackend(
 const builtInAdapters: readonly VideoBackendAdapter[] = [
   {
     id: 'mediabunny',
+    route: 'client',
+    autoPriority: 100,
     isAvailable: () => typeof VideoDecoder !== 'undefined' || typeof AudioDecoder !== 'undefined',
     open: async ({ element, options, http }) => {
       const { attachMediabunnyVideo } = await import('./backends/mediabunny')
@@ -294,24 +385,28 @@ const builtInAdapters: readonly VideoBackendAdapter[] = [
   },
   {
     id: 'tizen',
+    route: 'native',
     autoPriority: 300,
     isAvailable: () => hasTizenAvPlay(),
     open: ({ element, options }) => attachTizenVideo(element, options),
   },
   {
     id: 'webos',
+    route: 'html',
     autoPriority: 200,
     isAvailable: ({ userAgent, global }) => /web0S|webOS/i.test(userAgent) || 'webOS' in global,
     open: ({ element, options }) => attachHtmlVideo(element, options, 'webos'),
   },
   {
     id: 'vizio',
+    route: 'html',
     autoPriority: 200,
     isAvailable: (context) => isVizioRuntime(context),
     open: ({ element, options }) => attachHtmlVideo(element, options, 'vizio'),
   },
   {
     id: 'html',
+    route: 'html',
     autoPriority: 0,
     isAvailable: () => true,
     open: ({ element, options }) => attachHtmlVideo(element, options, 'html'),

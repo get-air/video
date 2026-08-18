@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
-import { VideoBackendUnavailableError } from '../errors'
 import { assertPlayableTracks } from './mediabunny'
 
-describe('MediaBunny track selection', () => {
-  it('rejects video whose only decodable track is audio so fallback can continue', () => {
-    expect(() => assertPlayableTracks(true, false, true))
-      .toThrow(VideoBackendUnavailableError)
+describe('MediaBunny track acceptance', () => {
+  it('rejects silent fallback when the source has undecodable audio', () => {
+    expect(() => assertPlayableTracks(true, true, true, false)).toThrowError(
+      expect.objectContaining({
+        _tag: 'VideoBackendUnavailableError',
+        backend: 'mediabunny',
+      }),
+    )
   })
 
-  it('accepts decodable video and true audio-only inputs', () => {
-    expect(() => assertPlayableTracks(true, true, false)).not.toThrow()
-    expect(() => assertPlayableTracks(false, false, true)).not.toThrow()
+  it('accepts video-only, audio-only, and fully decodable sources', () => {
+    expect(() => assertPlayableTracks(true, false, true, false)).not.toThrow()
+    expect(() => assertPlayableTracks(false, true, false, true)).not.toThrow()
+    expect(() => assertPlayableTracks(true, true, true, true)).not.toThrow()
   })
 })

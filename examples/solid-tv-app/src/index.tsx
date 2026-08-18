@@ -2,6 +2,11 @@ export {}
 
 async function main(): Promise<void> {
   const parameters = new URLSearchParams(window.location.search)
+  if (parameters.has('plain')) {
+    const { startPlainApp } = await import('./plain')
+    await startPlainApp()
+    return
+  }
   if (parameters.has('qualification')) {
     const { startQualificationApp } = await import('./qualification')
     await startQualificationApp()
