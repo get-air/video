@@ -68,11 +68,10 @@ export async function probeMediabunnyTrackDecodability(
       Promise.all(videoTracks.map((track) => track.canDecode())),
       Promise.all(audioTracks.map((track) => track.canDecode())),
     ])
-    // HTML media elements cannot portably switch embedded audio/video tracks.
-    // Require every advertised track to decode before accepting the HTML route;
-    // otherwise an unsupported default (for example TrueHD) can produce silent
-    // playback even when a decodable AC-3 alternate exists.
-    return allTracksDecodable(videoSupport, audioSupport)
+    // Portable HTML cannot select embedded audio/video tracks. Validate the
+    // container defaults (the first tracks reported by the demuxer); unsupported
+    // alternates must not disqualify an otherwise playable source.
+    return defaultTracksDecodable(videoSupport, audioSupport)
   } catch {
     return undefined
   } finally {
@@ -85,6 +84,13 @@ export function allTracksDecodable(
   audioSupport: readonly boolean[],
 ): boolean {
   return videoSupport.every(Boolean) && audioSupport.every(Boolean)
+}
+
+export function defaultTracksDecodable(
+  videoSupport: readonly boolean[],
+  audioSupport: readonly boolean[],
+): boolean {
+  return (videoSupport[0] ?? true) && (audioSupport[0] ?? true)
 }
 
 export async function attachMediabunnyVideo(
@@ -329,6 +335,7 @@ class MediabunnyVideoController extends EventTarget implements BackendVideoContr
   async stats(): Promise<SessionStats> {
     return {
       sessionId: this.sessionId,
+      playbackMode: 'mediabunny',
       encodedBytesBuffered: 0,
       bufferedAheadSeconds: this.bufferedAhead(),
       videoCodec: this.tracks.find((track) => track.kind === 'video' && track.selected)?.codec,

@@ -281,6 +281,7 @@ class TizenVideoController extends EventTarget implements BackendVideoController
   async stats(): Promise<SessionStats> {
     return {
       sessionId: this.sessionId,
+      playbackMode: 'platform',
       encodedBytesBuffered: 0,
       bufferedAheadSeconds: this.bufferedAhead(),
       videoCodec: this.tracks.find((track) => track.kind === 'video' && track.selected)?.codec,

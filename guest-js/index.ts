@@ -91,6 +91,8 @@ export interface MediaInfo {
 
 export interface SessionStats {
   sessionId: string
+  sourceId?: string
+  playbackMode?: 'html' | 'mediabunny' | 'transcode' | 'hybrid' | 'platform'
   encodedBytesBuffered: number
   bufferedAheadSeconds: number
   videoCodec?: string
@@ -99,6 +101,9 @@ export interface SessionStats {
   decodedFrameCopies: number
   droppedFrames: number
   averageFrameProcessingUs?: number
+  switchLatencyMillis?: number
+  seekLatencyMillis?: number
+  avDriftMillis?: number
   visible: boolean
   playing: boolean
 }

@@ -204,6 +204,7 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
     const quality = this.playbackQuality()
     return {
       sessionId: this.sessionId,
+      playbackMode: 'html',
       encodedBytesBuffered: 0,
       bufferedAheadSeconds: this.bufferedAhead(),
       videoCodec: this.tracks.find((track) => track.kind === 'video')?.codec,
