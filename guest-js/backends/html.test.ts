@@ -66,6 +66,23 @@ describe('HTML backend startup', () => {
     vi.unstubAllGlobals()
   })
 
+  it('rejects HTML when cross-origin track verification is inconclusive', async () => {
+    vi.stubGlobal('VideoDecoder', class VideoDecoder {})
+    vi.mocked(probeMediabunnyTrackDecodability).mockResolvedValueOnce(undefined)
+
+    await expect(attachHtmlVideo(
+      mediaElement('canplay'),
+      { source: 'https://media.example/movie.mkv' },
+      'html',
+      { fetch: vi.fn() },
+    )).rejects.toMatchObject({
+      _tag: 'VideoFeatureUnavailableError',
+      feature: 'completeCodecSupport',
+    })
+
+    vi.unstubAllGlobals()
+  })
+
   it('reports only portable HTML media capabilities', async () => {
     const htmlElement = mediaElement('canplay')
     const html = await attachHtmlVideo(htmlElement, { source: 'movie.mp4' }, 'html')

@@ -129,11 +129,13 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
         this.#transport,
         this.#options.signal,
       )
-      if (fullyDecodable === false) {
+      if (fullyDecodable !== true) {
         throw new VideoFeatureUnavailableError({
           backend: this.#backend,
           feature: 'completeCodecSupport',
-          message: `${this.#backend} playback cannot decode every required audio/video track`,
+          message: fullyDecodable === false
+            ? `${this.#backend} playback cannot decode every required audio/video track`
+            : `${this.#backend} playback could not verify every required audio/video track`,
         })
       }
     }
