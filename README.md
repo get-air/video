@@ -18,7 +18,9 @@ Tauri or another native bridge. It is an optional dependency and lazy-loaded
 only after faster route groups fail.
 
 `auto` proves routes in this order: HTML, native/platform adapters, optional
-client decoding, then transcoding adapters. HTML startup must reach `canplay`.
+client decoding, then transcoding adapters. HTML startup must reach `canplay`
+and produce non-zero video dimensions; container-only or audio-only false
+positives are rejected.
 When WebCodecs is available, a lazy MediaBunny metadata probe also verifies that
 the default audio and video tracks can decode before HTML is accepted. Portable
 HTML has no embedded-audio selector, so an unsupported default such as TrueHD

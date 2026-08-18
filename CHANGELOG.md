@@ -12,6 +12,8 @@ Release numbering follows the
 - Validate the container-default audio/video tracks for HTML routing, preventing
   an unsupported default TrueHD track from being masked by a decodable alternate
   while allowing unsupported alternates that portable HTML never selects.
+- Reject native `canplay` false positives that never decode video dimensions,
+  allowing MediaBunny or the universal transcoder fallback to take over.
 
 ## 0.1.1
 

@@ -17,6 +17,8 @@ function mediaElement(event: 'canplay' | 'error'): HTMLVideoElement {
       value: vi.fn(() => queueMicrotask(() => element.dispatchEvent(new Event(event)))),
     },
     pause: { configurable: true, value: vi.fn() },
+    videoWidth: { configurable: true, value: 1920 },
+    videoHeight: { configurable: true, value: 1080 },
   })
   return element
 }
@@ -50,7 +52,11 @@ describe('HTML backend startup', () => {
 
   it('rejects silent partial playback when a present media kind cannot decode', async () => {
     vi.stubGlobal('VideoDecoder', class VideoDecoder {})
-    vi.mocked(probeMediabunnyTrackDecodability).mockResolvedValueOnce(false)
+    vi.mocked(probeMediabunnyTrackDecodability).mockResolvedValueOnce({
+      supported: false,
+      hasVideo: true,
+      hasAudio: true,
+    })
     const fetch = vi.fn()
 
     await expect(attachHtmlVideo(
@@ -61,6 +67,24 @@ describe('HTML backend startup', () => {
     )).rejects.toMatchObject({
       _tag: 'VideoFeatureUnavailableError',
       feature: 'completeCodecSupport',
+    })
+
+    vi.unstubAllGlobals()
+  })
+
+  it('rejects false-positive HTML startup when a video never produces dimensions', async () => {
+    vi.stubGlobal('VideoDecoder', class VideoDecoder {})
+
+    const element = mediaElement('canplay')
+    Object.defineProperty(element, 'videoWidth', { configurable: true, value: 0 })
+    await expect(attachHtmlVideo(
+      element,
+      { source: 'movie.mkv' },
+      'html',
+      { fetch: vi.fn() },
+    )).rejects.toMatchObject({
+      _tag: 'VideoFeatureUnavailableError',
+      feature: 'videoFrameDecode',
     })
 
     vi.unstubAllGlobals()

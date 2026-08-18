@@ -121,20 +121,28 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
     const startup = this.#waitForStartup()
     this.element.load()
     await startup
+    if (!(this.element.videoWidth > 0)) {
+      throw new VideoFeatureUnavailableError({
+        backend: this.#backend,
+        feature: 'videoFrameDecode',
+        message: `${this.#backend} playback reached canplay without decoding a video frame`,
+      })
+    }
     if (this.#transport
       && (typeof VideoDecoder !== 'undefined' || typeof AudioDecoder !== 'undefined')) {
       const { probeMediabunnyTrackDecodability } = await import('./mediabunny')
-      const fullyDecodable = await probeMediabunnyTrackDecodability(
+      const probe = await probeMediabunnyTrackDecodability(
         source,
         this.#transport,
         this.#options.signal,
       )
-      if (fullyDecodable !== true) {
+      const missingVideoFrames = probe?.hasVideo === true && !(this.element.videoWidth > 0)
+      if (probe?.supported !== true || missingVideoFrames) {
         throw new VideoFeatureUnavailableError({
           backend: this.#backend,
           feature: 'completeCodecSupport',
-          message: fullyDecodable === false
-            ? `${this.#backend} playback cannot decode every required audio/video track`
+          message: probe?.supported === false || missingVideoFrames
+            ? `${this.#backend} playback cannot decode its required container and default tracks`
             : `${this.#backend} playback could not verify every required audio/video track`,
         })
       }

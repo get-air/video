@@ -30,8 +30,15 @@ import type {
 
 let mediabunnySessionSequence = 0
 
+export interface NativeHtmlProbe {
+  readonly supported: boolean
+  readonly hasVideo: boolean
+  readonly hasAudio: boolean
+}
+
 /**
- * Conservatively verify that every advertised audio/video track is decodable.
+ * Conservatively verify that the native HTML media stack supports the
+ * container and its default audio/video tracks.
  * `undefined` means the container could not be inspected and must not be
  * treated as proof of incompatibility.
  */
@@ -39,7 +46,7 @@ export async function probeMediabunnyTrackDecodability(
   sourceValue: string | VideoSource,
   transport: HttpTransport,
   signal?: AbortSignal,
-): Promise<boolean | undefined> {
+): Promise<NativeHtmlProbe | undefined> {
   const source = normalizeSource(sourceValue)
   if (source.cookies || source.userAgent || source.tlsCaFile) return undefined
   const input = new Input({
@@ -60,23 +67,44 @@ export async function probeMediabunnyTrackDecodability(
   })
   try {
     if (!await input.canRead()) return undefined
-    const [videoTracks, audioTracks] = await Promise.all([
+    if (typeof document === 'undefined') return undefined
+    const [format, videoTracks, audioTracks] = await Promise.all([
+      input.getFormat(),
       input.getVideoTracks(),
       input.getAudioTracks(),
     ])
-    const [videoSupport, audioSupport] = await Promise.all([
+    const [videoSupport, audioSupport, videoCodec, audioCodec] = await Promise.all([
       Promise.all(videoTracks.map((track) => track.canDecode())),
       Promise.all(audioTracks.map((track) => track.canDecode())),
+      videoTracks[0]?.getCodecParameterString(),
+      audioTracks[0]?.getCodecParameterString(),
     ])
     // Portable HTML cannot select embedded audio/video tracks. Validate the
     // container defaults (the first tracks reported by the demuxer); unsupported
     // alternates must not disqualify an otherwise playable source.
-    return defaultTracksDecodable(videoSupport, audioSupport)
+    const mimeType = defaultTrackMimeType(format.mimeType, videoCodec, audioCodec)
+    const nativeContainerSupport = document.createElement('video').canPlayType(mimeType) !== ''
+    return {
+      supported: nativeContainerSupport && defaultTracksDecodable(videoSupport, audioSupport),
+      hasVideo: videoTracks.length > 0,
+      hasAudio: audioTracks.length > 0,
+    }
   } catch {
     return undefined
   } finally {
     input.dispose()
   }
+}
+
+export function defaultTrackMimeType(
+  containerMimeType: string,
+  videoCodec?: string | null,
+  audioCodec?: string | null,
+): string {
+  const codecs = [videoCodec, audioCodec].filter((codec): codec is string => Boolean(codec))
+  return codecs.length === 0
+    ? containerMimeType
+    : `${containerMimeType}; codecs="${codecs.join(', ')}"`
 }
 
 export function allTracksDecodable(
