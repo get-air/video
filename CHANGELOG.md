@@ -9,6 +9,9 @@ Release numbering follows the
 - Conservatively preflight present audio and video kinds through MediaBunny
   when WebCodecs is available, preventing silent video-only acceptance while
   retaining direct HTML for fully decodable sources.
+- Reject HTML for mixed-codec multitrack sources unless every embedded track is
+  decodable, preventing an unsupported default TrueHD track from being masked
+  by a decodable alternate.
 
 ## 0.1.1
 

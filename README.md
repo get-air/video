@@ -20,9 +20,11 @@ only after faster route groups fail.
 `auto` proves routes in this order: HTML, native/platform adapters, optional
 client decoding, then transcoding adapters. HTML startup must reach `canplay`.
 When WebCodecs is available, a lazy MediaBunny metadata probe also verifies that
-at least one track for every present audio/video kind can decode before HTML is
-accepted; a video-only success therefore cannot silently discard unsupported
-audio. The same injected `@get-air/http` transport powers that range probe, so
+every advertised audio/video track can decode before HTML is accepted. This is
+deliberately conservative because portable HTML has no embedded-audio selector:
+an unsupported default such as TrueHD must not be hidden by a decodable AC-3
+alternate. A video-only success therefore cannot silently discard audio. The
+same injected `@get-air/http` transport powers that range probe, so
 Tauri can inspect cross-origin sources without weakening CORS. Applications can
 override route groups and observe every attempt:
 

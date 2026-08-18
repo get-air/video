@@ -31,9 +31,9 @@ import type {
 let mediabunnySessionSequence = 0
 
 /**
- * Conservatively verify that a source has at least one decodable track for
- * every present media kind. `undefined` means the container could not be
- * inspected and must not be treated as proof of incompatibility.
+ * Conservatively verify that every advertised audio/video track is decodable.
+ * `undefined` means the container could not be inspected and must not be
+ * treated as proof of incompatibility.
  */
 export async function probeMediabunnyTrackDecodability(
   sourceValue: string | VideoSource,
@@ -68,13 +68,23 @@ export async function probeMediabunnyTrackDecodability(
       Promise.all(videoTracks.map((track) => track.canDecode())),
       Promise.all(audioTracks.map((track) => track.canDecode())),
     ])
-    return (videoTracks.length === 0 || videoSupport.some(Boolean))
-      && (audioTracks.length === 0 || audioSupport.some(Boolean))
+    // HTML media elements cannot portably switch embedded audio/video tracks.
+    // Require every advertised track to decode before accepting the HTML route;
+    // otherwise an unsupported default (for example TrueHD) can produce silent
+    // playback even when a decodable AC-3 alternate exists.
+    return allTracksDecodable(videoSupport, audioSupport)
   } catch {
     return undefined
   } finally {
     input.dispose()
   }
+}
+
+export function allTracksDecodable(
+  videoSupport: readonly boolean[],
+  audioSupport: readonly boolean[],
+): boolean {
+  return videoSupport.every(Boolean) && audioSupport.every(Boolean)
 }
 
 export async function attachMediabunnyVideo(

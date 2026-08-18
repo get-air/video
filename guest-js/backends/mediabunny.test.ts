@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { assertPlayableTracks } from './mediabunny'
+import { allTracksDecodable, assertPlayableTracks } from './mediabunny'
 
 describe('MediaBunny track acceptance', () => {
   it('rejects silent fallback when the source has undecodable audio', () => {
@@ -16,5 +16,13 @@ describe('MediaBunny track acceptance', () => {
     expect(() => assertPlayableTracks(true, false, true, false)).not.toThrow()
     expect(() => assertPlayableTracks(false, true, false, true)).not.toThrow()
     expect(() => assertPlayableTracks(true, true, true, true)).not.toThrow()
+  })
+})
+
+describe('HTML track preflight', () => {
+  it('requires every embedded track to decode', () => {
+    expect(allTracksDecodable([true], [true, true])).toBe(true)
+    expect(allTracksDecodable([true], [false, true])).toBe(false)
+    expect(allTracksDecodable([], [])).toBe(true)
   })
 })
