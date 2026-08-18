@@ -3,6 +3,13 @@
 Release numbering follows the
 [versioning and compatibility policy](VERSIONING.md).
 
+## Unreleased
+
+- Require the HTML route to reach `canplay`, not merely metadata.
+- Conservatively preflight present audio and video kinds through MediaBunny
+  when WebCodecs is available, preventing silent video-only acceptance while
+  retaining direct HTML for fully decodable sources.
+
 ## 0.1.1
 
 - Added an explicit, augmentable adapter-error contract so platform packages

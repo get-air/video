@@ -30,6 +30,53 @@ import type {
 
 let mediabunnySessionSequence = 0
 
+/**
+ * Conservatively verify that a source has at least one decodable track for
+ * every present media kind. `undefined` means the container could not be
+ * inspected and must not be treated as proof of incompatibility.
+ */
+export async function probeMediabunnyTrackDecodability(
+  sourceValue: string | VideoSource,
+  transport: HttpTransport,
+  signal?: AbortSignal,
+): Promise<boolean | undefined> {
+  const source = normalizeSource(sourceValue)
+  if (source.cookies || source.userAgent || source.tlsCaFile) return undefined
+  const input = new Input({
+    formats: ALL_FORMATS,
+    source: new UrlSource(source.uri, {
+      fetchFn: (request, init) => {
+        const mediaRequest = new Request(request, init)
+        return transport.fetch(signal ? new Request(mediaRequest, { signal }) : mediaRequest)
+      },
+      requestInit: {
+        headers: new Headers(source.headers),
+        credentials: 'same-origin',
+        referrer: source.referrer,
+      },
+      maxCacheSize: 8 * 1024 * 1024,
+      parallelism: 1,
+    }),
+  })
+  try {
+    if (!await input.canRead()) return undefined
+    const [videoTracks, audioTracks] = await Promise.all([
+      input.getVideoTracks(),
+      input.getAudioTracks(),
+    ])
+    const [videoSupport, audioSupport] = await Promise.all([
+      Promise.all(videoTracks.map((track) => track.canDecode())),
+      Promise.all(audioTracks.map((track) => track.canDecode())),
+    ])
+    return (videoTracks.length === 0 || videoSupport.some(Boolean))
+      && (audioTracks.length === 0 || audioSupport.some(Boolean))
+  } catch {
+    return undefined
+  } finally {
+    input.dispose()
+  }
+}
+
 export async function attachMediabunnyVideo(
   element: HTMLVideoElement,
   options: AttachVideoOptions,

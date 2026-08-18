@@ -395,21 +395,21 @@ const builtInAdapters: readonly VideoBackendAdapter[] = [
     route: 'html',
     autoPriority: 200,
     isAvailable: ({ userAgent, global }) => /web0S|webOS/i.test(userAgent) || 'webOS' in global,
-    open: ({ element, options }) => attachHtmlVideo(element, options, 'webos'),
+    open: ({ element, options, http }) => attachHtmlVideo(element, options, 'webos', http),
   },
   {
     id: 'vizio',
     route: 'html',
     autoPriority: 200,
     isAvailable: (context) => isVizioRuntime(context),
-    open: ({ element, options }) => attachHtmlVideo(element, options, 'vizio'),
+    open: ({ element, options, http }) => attachHtmlVideo(element, options, 'vizio', http),
   },
   {
     id: 'html',
     route: 'html',
     autoPriority: 0,
     isAvailable: () => true,
-    open: ({ element, options }) => attachHtmlVideo(element, options, 'html'),
+    open: ({ element, options, http }) => attachHtmlVideo(element, options, 'html', http),
   },
 ]
 

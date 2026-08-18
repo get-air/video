@@ -3,8 +3,13 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { attachHtmlVideo } from './html'
+import { probeMediabunnyTrackDecodability } from './mediabunny'
 
-function mediaElement(event: 'loadedmetadata' | 'error'): HTMLVideoElement {
+vi.mock('./mediabunny', () => ({
+  probeMediabunnyTrackDecodability: vi.fn(),
+}))
+
+function mediaElement(event: 'canplay' | 'error'): HTMLVideoElement {
   const element = document.createElement('video')
   Object.defineProperties(element, {
     load: {
@@ -17,8 +22,8 @@ function mediaElement(event: 'loadedmetadata' | 'error'): HTMLVideoElement {
 }
 
 describe('HTML backend startup', () => {
-  it('does not accept a backend until media metadata loads', async () => {
-    const element = mediaElement('loadedmetadata')
+  it('does not accept a backend until media can play', async () => {
+    const element = mediaElement('canplay')
     element.preload = 'none'
     const abort = new AbortController()
     const addAbort = vi.spyOn(abort.signal, 'addEventListener')
@@ -30,7 +35,7 @@ describe('HTML backend startup', () => {
     const backendAbort = addAbort.mock.calls.filter(([type]) => type === 'abort').at(-1)?.[1]
 
     expect(controller.capabilities.backend).toBe('html')
-    expect(element.preload).toBe('metadata')
+    expect(element.preload).toBe('auto')
     await controller.destroy()
     expect(removeAbort).toHaveBeenCalledWith('abort', backendAbort)
     expect(element.preload).toBe('none')
@@ -43,8 +48,26 @@ describe('HTML backend startup', () => {
       .rejects.toThrow('HTML media playback failed during startup')
   })
 
+  it('rejects silent partial playback when a present media kind cannot decode', async () => {
+    vi.stubGlobal('VideoDecoder', class VideoDecoder {})
+    vi.mocked(probeMediabunnyTrackDecodability).mockResolvedValueOnce(false)
+    const fetch = vi.fn()
+
+    await expect(attachHtmlVideo(
+      mediaElement('canplay'),
+      { source: 'movie.mkv' },
+      'html',
+      { fetch },
+    )).rejects.toMatchObject({
+      _tag: 'VideoFeatureUnavailableError',
+      feature: 'completeCodecSupport',
+    })
+
+    vi.unstubAllGlobals()
+  })
+
   it('reports only portable HTML media capabilities', async () => {
-    const htmlElement = mediaElement('loadedmetadata')
+    const htmlElement = mediaElement('canplay')
     const html = await attachHtmlVideo(htmlElement, { source: 'movie.mp4' }, 'html')
     expect(html.capabilities).toMatchObject({
       drm: false,
@@ -57,7 +80,7 @@ describe('HTML backend startup', () => {
     await html.destroy()
     expect(htmlElement.playbackRate).toBe(1)
 
-    const webos = await attachHtmlVideo(mediaElement('loadedmetadata'), { source: 'movie.mp4' }, 'webos')
+    const webos = await attachHtmlVideo(mediaElement('canplay'), { source: 'movie.mp4' }, 'webos')
     expect(webos.capabilities).toMatchObject({
       drm: false,
       audioTrackSelection: false,
@@ -74,7 +97,7 @@ describe('HTML backend startup', () => {
     })
     await webos.destroy()
 
-    const vizioElement = mediaElement('loadedmetadata')
+    const vizioElement = mediaElement('canplay')
     const vizio = await attachHtmlVideo(vizioElement, { source: 'movie.mp4' }, 'vizio')
     expect(vizio.capabilities.playbackRate).toBe(true)
     await vizio.setPlaybackRate(1.5)

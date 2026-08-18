@@ -1,3 +1,5 @@
+import type { HttpTransport } from '@get-air/http'
+
 import { VideoFeatureUnavailableError } from '../errors'
 import { bufferedAhead } from '../index'
 import type {
@@ -23,8 +25,9 @@ export async function attachHtmlVideo(
   element: HTMLVideoElement,
   options: AttachVideoOptions,
   backend: HtmlBackend,
+  transport?: HttpTransport,
 ): Promise<BackendVideoController> {
-  const controller = new HtmlVideoController(element, options, backend)
+  const controller = new HtmlVideoController(element, options, backend, transport)
   try {
     await controller.start()
     return controller
@@ -40,6 +43,7 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
   readonly capabilities: PlayerCapabilities
   readonly #options: AttachVideoOptions
   readonly #backend: HtmlBackend
+  readonly #transport?: HttpTransport
   readonly #media: MediaInfo = { seekable: true, live: false, tracks: [], chapters: [] }
   readonly #listeners: Array<readonly [string, EventListener]> = []
   readonly #original: {
@@ -52,11 +56,17 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
   #destroyed = false
   readonly #handleAbort = (): void => { void this.destroy().catch(() => undefined) }
 
-  constructor(element: HTMLVideoElement, options: AttachVideoOptions, backend: HtmlBackend) {
+  constructor(
+    element: HTMLVideoElement,
+    options: AttachVideoOptions,
+    backend: HtmlBackend,
+    transport?: HttpTransport,
+  ) {
     super()
     this.element = element
     this.#options = options
     this.#backend = backend
+    this.#transport = transport
     this.capabilities = {
       backend,
       containers: 'platform',
@@ -106,11 +116,27 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
       this.dispatchEvent(new CustomEvent('error', { detail: { code: 'html-media', message } }))
     })
 
-    if (this.element.preload === 'none') this.element.preload = 'metadata'
+    if (this.element.preload === 'none') this.element.preload = 'auto'
     this.element.src = source.uri
     const startup = this.#waitForStartup()
     this.element.load()
     await startup
+    if (this.#transport
+      && (typeof VideoDecoder !== 'undefined' || typeof AudioDecoder !== 'undefined')) {
+      const { probeMediabunnyTrackDecodability } = await import('./mediabunny')
+      const fullyDecodable = await probeMediabunnyTrackDecodability(
+        source,
+        this.#transport,
+        this.#options.signal,
+      )
+      if (fullyDecodable === false) {
+        throw new VideoFeatureUnavailableError({
+          backend: this.#backend,
+          feature: 'completeCodecSupport',
+          message: `${this.#backend} playback cannot decode every required audio/video track`,
+        })
+      }
+    }
     this.#refreshMedia()
     if (source.startPositionSeconds !== undefined) {
       this.element.currentTime = Math.max(0, source.startPositionSeconds)
@@ -240,11 +266,11 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
   }
 
   #waitForStartup(): Promise<void> {
-    if (this.element.readyState >= HTMLMediaElement.HAVE_METADATA) return Promise.resolve()
+    if (this.element.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return Promise.resolve()
     return new Promise((resolve, reject) => {
       const signal = this.#options.signal
       const cleanup = () => {
-        this.element.removeEventListener('loadedmetadata', ready)
+        this.element.removeEventListener('canplay', ready)
         this.element.removeEventListener('error', failed)
         signal?.removeEventListener('abort', aborted)
       }
@@ -260,10 +286,10 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
         cleanup()
         reject(signal?.reason ?? new DOMException('Video attachment was aborted', 'AbortError'))
       }
-      this.element.addEventListener('loadedmetadata', ready, { once: true })
+      this.element.addEventListener('canplay', ready, { once: true })
       this.element.addEventListener('error', failed, { once: true })
       signal?.addEventListener('abort', aborted, { once: true })
-      if (this.element.readyState >= HTMLMediaElement.HAVE_METADATA) ready()
+      if (this.element.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) ready()
     })
   }
 
