@@ -2,7 +2,7 @@
   "name": "@get-air/video",
   "version": "0.1.1",
   "author": "Air contributors",
-  "description": "One lean DOM-first video API for MediaBunny, web, Tizen, webOS, and Vizio",
+  "description": "One lean DOM-first video API for HTML, native adapters, and smart TVs",
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
@@ -19,10 +19,8 @@
     "./react/player.css"
   ],
   "keywords": [
-    "webcodecs",
     "video",
-    "mediabunny",
-    "mkv",
+    "html5",
     "smart-tv"
   ],
   "engines": {
@@ -77,7 +75,6 @@
     "build": "tsx scripts/build.ts",
     "ci": "npm run check && npm run build && npm pack --dry-run --ignore-scripts",
     "ci:act": "act push --job package",
-    "qualify:uhd": "tsx qualification/uhd-browser.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "check": "npm run typecheck && npm run check:effect && npm test",
     "check:effect": "effect-language-service diagnostics --project tsconfig.json --strict --format text",
@@ -93,9 +90,6 @@
     "@noriginmedia/norigin-spatial-navigation": "^3.3.0",
     "@plussub/srt-vtt-parser": "^2.0.5",
     "effect": "^3.22.1"
-  },
-  "optionalDependencies": {
-    "mediabunny": "^1.54.0"
   },
   "peerDependencies": {
     "@solidtv/renderer": "^1.6.3",

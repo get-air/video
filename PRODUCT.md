@@ -25,7 +25,8 @@ The SolidTV example is both an integration sample and an on-device playback labo
 ## Capabilities and Constraints
 
 - Playback UI must work without touch, hover, or a pointer.
-- Vizio uses the platform HTML video pipeline; MediaBunny is an explicit browser/WebCodecs path.
+- Vizio uses the platform HTML video pipeline; native and transcode paths are
+  supplied by explicit external adapters.
 - The authored television surface is 1920×1080 with overscan-safe margins.
 - Runtime source URLs may be supplied through query parameters for isolated device testing.
 

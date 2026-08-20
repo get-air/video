@@ -93,13 +93,12 @@ function fakeBackend(element: HTMLVideoElement, sequence: number): BackendVideoC
 }
 
 describe('external backend adapters', () => {
-  it('routes auto playback through HTML before native and client backends', async () => {
+  it('uses the caller-provided HTML, native, and transcode fallback order', async () => {
     const opened: string[] = []
     const attempts: VideoRoutingAttempt[] = []
     const html: VideoBackendAdapter = {
       id: 'html',
       route: 'html',
-      autoPriority: 100,
       isAvailable: () => true,
       open: async () => {
         opened.push('html')
@@ -109,28 +108,26 @@ describe('external backend adapters', () => {
     const native: VideoBackendAdapter = {
       id: 'native-surface',
       route: 'native',
-      autoPriority: 250,
       isAvailable: () => true,
       open: async ({ element }) => {
         opened.push('native')
         return fakeBackend(element, 1)
       },
     }
-    const clientDecode: VideoBackendAdapter = {
-      id: 'client-decode',
-      route: 'client',
-      autoPriority: 100,
+    const transcode: VideoBackendAdapter = {
+      id: 'transcode',
+      route: 'transcode',
       isAvailable: () => true,
       open: async ({ element }) => {
-        opened.push('client')
+        opened.push('transcode')
         return fakeBackend(element, 2)
       },
     }
-    const client = createVideoClient({ adapters: [html, native, clientDecode] })
+    const client = createVideoClient({ adapters: [html, native, transcode] })
 
     const controller = await client.attach(document.createElement('video'), {
       source: 'movie.mkv',
-      backend: 'auto',
+      backend: ['html', 'native-surface', 'transcode'],
       routing: { onAttempt: (attempt) => attempts.push(attempt) },
     })
 
@@ -147,52 +144,17 @@ describe('external backend adapters', () => {
     await controller.destroy()
   })
 
-  it('lets applications put an optional client decoder before other route groups', async () => {
-    const opened: string[] = []
-    const clientDecode: VideoBackendAdapter = {
-      id: 'client-decode',
-      route: 'client',
-      autoPriority: 100,
-      isAvailable: () => true,
-      open: async ({ element }) => {
-        opened.push('client')
-        return fakeBackend(element, 1)
-      },
-    }
-    const html: VideoBackendAdapter = {
-      id: 'html',
-      route: 'html',
-      autoPriority: 100,
-      isAvailable: () => true,
-      open: async ({ element }) => {
-        opened.push('html')
-        return fakeBackend(element, 2)
-      },
-    }
-    const client = createVideoClient({ adapters: [html, clientDecode] })
-
-    const controller = await client.attach(document.createElement('video'), {
-      source: 'movie.mkv',
-      backend: 'auto',
-      routing: { order: ['client', 'html'] },
-    })
-
-    expect(opened).toEqual(['client'])
-    await controller.destroy()
-  })
-
   it('keeps a named platform adapter outside core while preserving fallback and load', async () => {
     let sequence = 0
     const adapter: VideoBackendAdapter = {
       id: 'native-surface',
-      autoPriority: 250,
       isAvailable: () => true,
       open: vi.fn(async ({ element }) => fakeBackend(element, ++sequence)),
     }
     const client = createVideoClient({ adapters: [adapter] })
     const controller = await client.attach(document.createElement('video'), {
       source: 'movie.mkv',
-      backend: ['mediabunny', 'native-surface'],
+      backend: ['not-installed', 'native-surface'],
     })
 
     expect(controller.capabilities.backend).toBe('native-surface')

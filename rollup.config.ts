@@ -59,7 +59,6 @@ const config: RollupOptions = {
   ],
   external: [
     /^@get-air\/http(?:\/.*)?$/,
-    /^mediabunny$/,
     /^react(?:\/.*)?$/,
     /^solid-js(?:\/.*)?$/,
     /^@solidtv\/(?:renderer|solid)(?:\/.*)?$/,

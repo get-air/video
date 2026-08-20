@@ -18,7 +18,8 @@ change pass locally.
 
 ## Design expectations
 
-- Keep MediaBunny in the direct DOM/WebCodecs/canvas path.
+- Keep playback selection explicit; core provides HTML/TV backends and external
+  packages provide native or transcode adapters.
 - Keep browser/TV capability claims aligned with implemented behavior.
 - Preserve one controller contract and client-scoped backend selection.
 - Implement behavior once in Effect, then expose plain Promise and Effect
@@ -39,19 +40,13 @@ npm ci --prefix examples/solid-tv-app
 npm run build --prefix examples/solid-tv-app
 ```
 
-For playback, MediaBunny, geometry, or performance work, also run:
-
-```sh
-npm run qualify:uhd
-```
-
 Exercise the package CI job locally with `act` before pushing:
 
 ```sh
 npm run ci:act
 ```
 
-Hosted CI remains authoritative for the release qualification environment.
+Hosted CI remains authoritative for the release environment.
 
 ## Versioning and releases
 
@@ -73,4 +68,3 @@ Agent-capable tools should load these when the task matches:
 
 They are also concise review checklists for human contributors. The local
 copies are intentional so a standalone clone retains the rules.
-

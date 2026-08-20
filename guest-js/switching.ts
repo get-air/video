@@ -221,7 +221,7 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
 
   /**
    * Replaces the current source. `backend` may be a single value or an ordered
-   * chain such as `['mediabunny', 'html']`; other omitted options are retained.
+   * chain such as `['html', 'native-surface']`; other omitted options are retained.
    */
   load(source: string | VideoSource, options: VideoLoadOptions = {}): Promise<void> {
     return runVideoEffectPromise(this.loadEffect(source, options))

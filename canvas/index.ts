@@ -31,7 +31,7 @@ export interface AttachCanvasVideoOptions extends Omit<AttachVideoOptions, 'surf
 }
 
 export interface CanvasVideoController extends VideoController {
-  /** Invisible DOM anchor used for native and MediaBunny geometry. */
+  /** Invisible DOM anchor used for native video geometry. */
   readonly anchor: HTMLVideoElement
   /** Synchronize after changing a static rect outside the renderer loop. */
   updateLayout(): void
@@ -64,9 +64,8 @@ export function canvasRectToViewport(
 }
 
 /**
- * Attach any Air backend beneath a transparent canvas. MediaBunny output is
- * inserted immediately before the renderer canvas; native backends use the
- * same anchor as their transparent WebView aperture.
+ * Attach any Air backend beneath a transparent canvas. Native backends use the
+ * anchor as their transparent WebView aperture.
  */
 export async function attachCanvasVideo(
   options: AttachCanvasVideoOptions,

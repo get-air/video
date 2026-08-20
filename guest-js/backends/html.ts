@@ -1,5 +1,3 @@
-import type { HttpTransport } from '@get-air/http'
-
 import { VideoFeatureUnavailableError } from '../errors'
 import { bufferedAhead } from '../index'
 import type {
@@ -25,9 +23,8 @@ export async function attachHtmlVideo(
   element: HTMLVideoElement,
   options: AttachVideoOptions,
   backend: HtmlBackend,
-  transport?: HttpTransport,
 ): Promise<BackendVideoController> {
-  const controller = new HtmlVideoController(element, options, backend, transport)
+  const controller = new HtmlVideoController(element, options, backend)
   try {
     await controller.start()
     return controller
@@ -43,7 +40,6 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
   readonly capabilities: PlayerCapabilities
   readonly #options: AttachVideoOptions
   readonly #backend: HtmlBackend
-  readonly #transport?: HttpTransport
   readonly #media: MediaInfo = { seekable: true, live: false, tracks: [], chapters: [] }
   readonly #listeners: Array<readonly [string, EventListener]> = []
   readonly #original: {
@@ -60,13 +56,11 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
     element: HTMLVideoElement,
     options: AttachVideoOptions,
     backend: HtmlBackend,
-    transport?: HttpTransport,
   ) {
     super()
     this.element = element
     this.#options = options
     this.#backend = backend
-    this.#transport = transport
     this.capabilities = {
       backend,
       containers: 'platform',
@@ -127,25 +121,6 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
         feature: 'videoFrameDecode',
         message: `${this.#backend} playback reached canplay without decoding a video frame`,
       })
-    }
-    if (this.#transport
-      && (typeof VideoDecoder !== 'undefined' || typeof AudioDecoder !== 'undefined')) {
-      const { probeMediabunnyTrackDecodability } = await import('./mediabunny')
-      const probe = await probeMediabunnyTrackDecodability(
-        source,
-        this.#transport,
-        this.#options.signal,
-      )
-      const missingVideoFrames = probe?.hasVideo === true && !(this.element.videoWidth > 0)
-      if (probe?.supported !== true || missingVideoFrames) {
-        throw new VideoFeatureUnavailableError({
-          backend: this.#backend,
-          feature: 'completeCodecSupport',
-          message: probe?.supported === false || missingVideoFrames
-            ? `${this.#backend} playback cannot decode its required container and default tracks`
-            : `${this.#backend} playback could not verify every required audio/video track`,
-        })
-      }
     }
     this.#refreshMedia()
     if (source.startPositionSeconds !== undefined) {

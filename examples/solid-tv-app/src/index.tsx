@@ -7,11 +7,6 @@ async function main(): Promise<void> {
     await startPlainApp()
     return
   }
-  if (parameters.has('qualification')) {
-    const { startQualificationApp } = await import('./qualification')
-    await startQualificationApp()
-    return
-  }
   const [rendererModule, shaderModule, canvasRendererModule, canvasShaderModule, solidModule, videoModule, appModule] = await Promise.all([
     import('@solidtv/renderer/webgl'),
     import('@solidtv/renderer/webgl/shaders'),

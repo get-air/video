@@ -380,9 +380,8 @@ export function App(props: { renderer: SolidRendererLike }) {
     else if (key.toLowerCase() === 'n') {
       setSource((value) => value === '/sample.mkv' ? '/sample-2.mkv' : '/sample.mkv')
       report('Loaded the alternate local test clip.')
-    } else if (key === '1') setBackends(['vizio', 'html', 'mediabunny'])
-    else if (key === '2') setBackends(['mediabunny'])
-    else if (key === '3') setBackends(['html'])
+    } else if (key === '1') setBackends(['vizio', 'html'])
+    else if (key === '2') setBackends(['html'])
   }
   window.addEventListener('keydown', keydown)
   onCleanup(() => window.removeEventListener('keydown', keydown))
@@ -557,9 +556,9 @@ export function App(props: { renderer: SolidRendererLike }) {
 
 function parseBackends(parameters: URLSearchParams): readonly VideoBackend[] {
   const requested = parameters.get('backend')
-  if (!requested) return ['vizio', 'html', 'mediabunny']
+  if (!requested) return ['vizio', 'html']
   const values = requested.split(',').map((value) => value.trim()).filter(Boolean)
-  return values.length > 0 ? values as VideoBackend[] : ['vizio', 'html', 'mediabunny']
+  return values.length > 0 ? values as VideoBackend[] : ['vizio', 'html']
 }
 
 function nextTrack(tracks: readonly MediaTrack[]): MediaTrack {

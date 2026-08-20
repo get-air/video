@@ -4,10 +4,10 @@ export type TrackKind = 'video' | 'audio' | 'subtitle'
 export type VideoFitMode = 'fit' | 'cover' | 'stretch'
 export type DeviceProfile = 'auto' | 'mobile' | 'tv' | 'desktop'
 
-export type BuiltInVideoBackend = 'mediabunny' | 'html' | 'tizen' | 'webos' | 'vizio'
+export type BuiltInVideoBackend = 'html' | 'tizen' | 'webos' | 'vizio'
 export type VideoBackendId = BuiltInVideoBackend | (string & {})
-export type VideoBackend = 'auto' | VideoBackendId
-export type VideoRouteKind = 'html' | 'native' | 'client' | 'transcode'
+export type VideoBackend = VideoBackendId
+export type VideoRouteKind = 'html' | 'native' | 'transcode'
 export type VideoRoutingPhase = 'probing' | 'unavailable' | 'opening' | 'selected' | 'failed'
 
 export interface VideoRoutingAttempt {
@@ -19,8 +19,6 @@ export interface VideoRoutingAttempt {
 }
 
 export interface VideoRoutingOptions {
-  /** Route groups attempted for `backend: "auto"`. Defaults to HTML, native, client, transcode. */
-  readonly order?: readonly VideoRouteKind[]
   /** Diagnostic hook for backend probes, failures, and the selected route. */
   readonly onAttempt?: (attempt: VideoRoutingAttempt) => void
 }
@@ -92,7 +90,7 @@ export interface MediaInfo {
 export interface SessionStats {
   sessionId: string
   sourceId?: string
-  playbackMode?: 'html' | 'mediabunny' | 'transcode' | 'hybrid' | 'platform'
+  playbackMode?: 'html' | 'transcode' | 'platform'
   encodedBytesBuffered: number
   bufferedAheadSeconds: number
   videoCodec?: string
@@ -117,26 +115,17 @@ export interface PlaybackQuality {
   droppedFramePercent: number
 }
 
-export interface MediabunnyPlaybackOptions {
-  /** Encoded-byte cache ceiling. MediaBunny defaults to 64 MiB. */
-  maxCacheBytes?: number
-  /** Parallel HTTP range requests. MediaBunny defaults to two. */
-  parallelism?: number
-}
-
 /**
  * Augment this interface from an adapter package to add typed options without
  * making the core package depend on that adapter.
  */
-export interface VideoBackendOptionsMap {
-  mediabunny: MediabunnyPlaybackOptions
-}
+export interface VideoBackendOptionsMap {}
 
 export type VideoBackendOptions = Partial<VideoBackendOptionsMap>
 
 export interface AttachVideoOptions {
   source: string | VideoSource
-  /** One backend ID or an ordered fallback chain. `auto` uses `routing.order`. */
+  /** One explicit backend ID or an ordered fallback chain. Defaults to `html`. */
   backend?: VideoBackend | readonly VideoBackend[]
   /** Additional ordered fallbacks after `backend`. */
   fallbackBackends?: readonly VideoBackend[]
@@ -285,10 +274,8 @@ export interface VideoBackendOpenContext {
 /** Explicit extension seam used by platform packages such as `@get-air/video-tauri`. */
 export interface VideoBackendAdapter {
   readonly id: VideoBackendId
-  /** Playback route used to order adapters when `backend` is `auto`. */
+  /** Playback route used for diagnostics. */
   readonly route?: VideoRouteKind
-  /** Higher values are attempted first for `backend: 'auto'`. Omit for explicit-only adapters. */
-  readonly autoPriority?: number
   isAvailable(context: VideoRuntimeContext): boolean | Promise<boolean>
   open(context: VideoBackendOpenContext): Promise<BackendVideoController>
 }

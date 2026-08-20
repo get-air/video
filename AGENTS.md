@@ -18,12 +18,12 @@ name is **Air**; `@get-air` is the npm scope, not part of the product name.
 - Consume other Air packages from the public registry. Do not add `workspace:`,
   cross-repository `file:`, or organizational-root dependencies or lockfiles.
 - `@get-air/video` is DOM-first. It owns the shared controller/types, HTML,
-  MediaBunny, Tizen AVPlay, webOS/Vizio behavior, framework integrations, and
-  Promise and Effect entrypoints.
+  Tizen AVPlay, webOS/Vizio behavior, framework integrations, and Promise and
+  Effect entrypoints.
 - Never add Tauri APIs, Rust/native playback, or native-surface compositor code
   here. Those belong in `get-air/tauri-video-plugin`.
-- MediaBunny plays directly through DOM/WebCodecs/canvas. Do not route decoded
-  frames through Tauri or another native bridge.
+- Keep playback engines limited to explicit HTML/TV backends and client-scoped
+  native or transcode adapters.
 - Keep external backends explicit and client-scoped; do not add global
   side-effect registration.
 
@@ -46,8 +46,6 @@ name is **Air**; `@get-air` is the npm scope, not part of the product name.
   registry-backed; an example in this repository may link this package root.
 - Run the focused checks described in `CONTRIBUTING.md`; use `act` to exercise
   the affected GitHub Actions job before a push.
-- Media/runtime changes retain the real 3840x2160 qualification gate and its
-  frame-rate, drop-rate, range-request, and decoded-copy assertions.
 - Follow `VERSIONING.md`; run `npm run check:release` for release metadata.
 - Stable publication happens only through GitHub Actions trusted publishing
   with provenance. Never add npm credentials to files, `.env`, or workflows.

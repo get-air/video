@@ -274,17 +274,10 @@ function resolveAdapters(
   const requested = requestedBackends(options)
   const resolved: VideoBackendAdapter[] = []
   for (const backend of requested) {
-    const choices = backend === 'auto'
-      ? [...adapters]
-        .filter((adapter) => adapter.autoPriority !== undefined)
-        .filter((adapter) => routeOrder(options).includes(adapterRoute(adapter)))
-        .sort((left, right) => compareAutoAdapters(left, right, routeOrder(options)))
-      : adapters.filter((adapter) => adapter.id === backend)
+    const choices = adapters.filter((adapter) => adapter.id === backend)
     if (choices.length === 0) {
-      if (backend !== 'auto') {
-        resolved.push(unavailableAdapter(backend,
-          `Video backend ${String(backend)} is not registered`))
-      }
+      resolved.push(unavailableAdapter(backend,
+        `Video backend ${String(backend)} is not registered`))
       continue
     }
     for (const adapter of choices) {
@@ -294,32 +287,11 @@ function resolveAdapters(
   return resolved
 }
 
-export const defaultVideoRouteOrder: readonly VideoRouteKind[] = [
-  'html',
-  'native',
-  'client',
-  'transcode',
-]
-
-function routeOrder(options: AttachVideoOptions): readonly VideoRouteKind[] {
-  return [...new Set(options.routing?.order ?? defaultVideoRouteOrder)]
-}
-
 function adapterRoute(adapter: VideoBackendAdapter): VideoRouteKind {
   if (adapter.route) return adapter.route
   if (adapter.id === 'html' || adapter.id === 'webos' || adapter.id === 'vizio') return 'html'
-  if (adapter.id === 'mediabunny') return 'client'
   if (adapter.id === 'transcode') return 'transcode'
   return 'native'
-}
-
-function compareAutoAdapters(
-  left: VideoBackendAdapter,
-  right: VideoBackendAdapter,
-  order: readonly VideoRouteKind[],
-): number {
-  const routeDifference = order.indexOf(adapterRoute(left)) - order.indexOf(adapterRoute(right))
-  return routeDifference || (right.autoPriority ?? 0) - (left.autoPriority ?? 0)
 }
 
 function reportRoutingAttempt(
@@ -350,66 +322,34 @@ export function requestedBackends(
 ): readonly VideoBackend[] {
   const requested = Array.isArray(options.backend)
     ? [...options.backend]
-    : options.backend ? [options.backend] : ['auto']
+    : options.backend ? [options.backend] : ['html']
   return [...new Set([...requested, ...(options.fallbackBackends ?? [])])]
-}
-
-export interface VideoRuntimeHints {
-  readonly tizen: boolean
-  readonly webos: boolean
-  readonly vizio: boolean
-}
-
-export function selectPlayerBackend(
-  requested: AttachVideoOptions['backend'],
-  runtime: VideoRuntimeHints = runtimeHints(),
-): VideoBackendId {
-  const first = Array.isArray(requested) ? requested[0] : requested
-  if (first && first !== 'auto') return first
-  if (runtime.tizen) return 'tizen'
-  if (runtime.webos) return 'webos'
-  if (runtime.vizio) return 'vizio'
-  return 'html'
 }
 
 const builtInAdapters: readonly VideoBackendAdapter[] = [
   {
-    id: 'mediabunny',
-    route: 'client',
-    autoPriority: 100,
-    isAvailable: () => typeof VideoDecoder !== 'undefined' || typeof AudioDecoder !== 'undefined',
-    open: async ({ element, options, http }) => {
-      const { attachMediabunnyVideo } = await import('./backends/mediabunny')
-      return attachMediabunnyVideo(element, options, http)
-    },
-  },
-  {
     id: 'tizen',
     route: 'native',
-    autoPriority: 300,
     isAvailable: () => hasTizenAvPlay(),
     open: ({ element, options }) => attachTizenVideo(element, options),
   },
   {
     id: 'webos',
     route: 'html',
-    autoPriority: 200,
     isAvailable: ({ userAgent, global }) => /web0S|webOS/i.test(userAgent) || 'webOS' in global,
-    open: ({ element, options, http }) => attachHtmlVideo(element, options, 'webos', http),
+    open: ({ element, options }) => attachHtmlVideo(element, options, 'webos'),
   },
   {
     id: 'vizio',
     route: 'html',
-    autoPriority: 200,
     isAvailable: (context) => isVizioRuntime(context),
-    open: ({ element, options, http }) => attachHtmlVideo(element, options, 'vizio', http),
+    open: ({ element, options }) => attachHtmlVideo(element, options, 'vizio'),
   },
   {
     id: 'html',
     route: 'html',
-    autoPriority: 0,
     isAvailable: () => true,
-    open: ({ element, options, http }) => attachHtmlVideo(element, options, 'html', http),
+    open: ({ element, options }) => attachHtmlVideo(element, options, 'html'),
   },
 ]
 
@@ -426,15 +366,6 @@ function runtimeContext(): VideoRuntimeContext {
   return {
     userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent,
     global: globalThis,
-  }
-}
-
-function runtimeHints(): VideoRuntimeHints {
-  const context = runtimeContext()
-  return {
-    tizen: typeof window !== 'undefined' && hasTizenAvPlay(),
-    webos: /web0S|webOS/i.test(context.userAgent) || 'webOS' in context.global,
-    vizio: isVizioRuntime(context),
   }
 }
 

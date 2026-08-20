@@ -40,17 +40,6 @@ interface AttachVideoOptions {
 `backend` is an ordered chain. Unavailable adapters are skipped; load failures
 continue to the next adapter. `fallbackBackends` is appended and de-duplicated.
 
-MediaBunny-specific tuning is namespaced:
-
-```ts
-backendOptions: {
-  mediabunny: {
-    maxCacheBytes: 64 * 1024 * 1024,
-    parallelism: 2,
-  },
-}
-```
-
 External adapter packages augment `VideoBackendOptionsMap` with their own
 strongly typed namespace.
 
@@ -59,14 +48,11 @@ strongly typed namespace.
 ```ts
 interface VideoBackendAdapter {
   readonly id: string
-  readonly autoPriority?: number
+  readonly route?: 'html' | 'native' | 'transcode'
   isAvailable(context: VideoRuntimeContext): boolean | Promise<boolean>
   open(context: VideoBackendOpenContext): Promise<BackendVideoController>
 }
 ```
-
-Omit `autoPriority` for explicit-only adapters. MediaBunny uses this rule so
-`auto` does not replace a browser's efficient native MP4/HLS path.
 
 `open` returns the same internal controller contract implemented by built-in
 backends. The public client wraps it in a stable controller before returning.
@@ -181,7 +167,7 @@ retain the same stable-controller behavior as the Promise API:
 const program = Effect.gen(function* () {
   const player = yield* attachVideoEffect(anchor, {
     source: movie,
-    backend: 'mediabunny',
+    backend: 'html',
   })
   yield* player.play()
   yield* player.load(nextMovie)
@@ -200,7 +186,7 @@ at the JavaScript boundary.
 <VideoPlayer
   client={videoClient}
   source={movie}
-  options={{ backend: ['mediabunny', 'tauri'] }}
+  options={{ backend: ['html', 'tauri'] }}
 />
 ```
 

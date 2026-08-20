@@ -80,12 +80,12 @@ describe('SwitchingVideoController', () => {
     const changed = vi.fn()
     controller.on('backendchange', changed)
 
-    await controller.load('two.mkv', { backend: ['mediabunny', 'native-surface'] })
+    await controller.load('two.mkv', { backend: ['html', 'native-surface'] })
 
     expect(first.destroy).toHaveBeenCalledOnce()
     expect(attach).toHaveBeenCalledWith(expect.objectContaining({
       source: 'two.mkv',
-      backend: ['mediabunny', 'native-surface'],
+      backend: ['html', 'native-surface'],
     }))
     expect(controller.sessionId).toBe('second')
     expect(changed).toHaveBeenCalledOnce()

@@ -47,23 +47,3 @@ jobs:
         working-directory: examples/solid-tv-app
       - run: npm run build
         working-directory: examples/solid-tv-app
-      - name: Install 4K fixture encoder
-        if: ${{ env.ACT != 'true' }}
-        run: sudo apt-get install --yes ffmpeg
-      - name: Qualify 4K MediaBunny playback
-        if: ${{ env.ACT != 'true' }}
-        env:
-          # Hosted runners use software decode; retain a sustained UHD gate
-          # while local target-hardware qualification defaults to 4K30.
-          AIR_UHD_SOURCE_FPS: 20
-          AIR_UHD_MIN_FPS: 18
-          AIR_UHD_MAX_DROP_PERCENT: 5
-          AIR_UHD_DURATION_SECONDS: 8
-        run: npm run qualify:uhd
-      - name: Upload 4K qualification evidence
-        if: ${{ always() && env.ACT != 'true' }}
-        uses: actions/upload-artifact@v6
-        with:
-          name: 4k-mediabunny-qualification
-          path: qualification/artifacts/uhd-browser.json
-          if-no-files-found: error

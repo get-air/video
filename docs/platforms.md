@@ -1,40 +1,10 @@
 # Platform behavior
 
-## Automatic selection
+## Explicit selection
 
-`backend: 'auto'` tries registered adapters by descending `autoPriority`.
-Built-in priorities select:
-
-1. Samsung Tizen AVPlay when present;
-2. webOS or Vizio platform HTML playback when detected;
-3. generic HTML playback.
-
-MediaBunny has no automatic priority and must be requested explicitly.
-
-## MediaBunny
-
-MediaBunny is a pure browser backend:
-
-- demuxes supported files, including Matroska, in JavaScript;
-- decodes through WebCodecs;
-- schedules audio through `AudioContext`;
-- presents pooled MediaBunny canvases directly in the DOM;
-- loads bytes through `@get-air/http` and HTTP range requests;
-- never imports or invokes Tauri.
-
-Cross-origin media servers must allow the application origin with CORS and
-must expose byte-range responses (`Accept-Ranges` / `206 Partial Content`) for
-efficient seeking and bounded buffering.
-
-Codec availability is still determined by `VideoDecoder.isConfigSupported` /
-`AudioDecoder.isConfigSupported` in the runtime. An ordered HTML or platform
-adapter can follow MediaBunny when a codec is not decodable.
-
-The default local profile verifies 3840×2160 at 30 FPS. GitHub-hosted release
-CI uses a 20 FPS source because its shared runner has no stable hardware
-decoder. Neither result is a cadence guarantee for every TV decoder. Use
-`AIR_UHD_SOURCE_FPS=60 npm run qualify:uhd` to measure a target device's 4K60
-path.
+Air does not infer a playback engine. Select `html`, a registered native
+adapter such as `tauri`, or `transcode`. An ordered array is an explicit
+fallback contract, for example `['html', 'tauri', 'transcode']`.
 
 ## Samsung Tizen
 
@@ -93,7 +63,7 @@ models. The HTML-backed `setPlaybackRate` method delegates to the platform media
 element and can still reject values unsupported by a particular model.
 
 `suspendWhenHidden` is an adapter option rather than a universal DOM behavior.
-The Tauri adapter honors it; the built-in HTML, MediaBunny, and TV backends do
+The Tauri adapter honors it; the built-in HTML and TV backends do
 not currently suspend playback solely because the geometry anchor is hidden.
 
 ## External/native platforms

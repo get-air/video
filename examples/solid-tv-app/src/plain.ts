@@ -394,9 +394,9 @@ function required<ElementType extends Element>(root: ParentNode, selector: strin
 
 function parseBackends(parameters: URLSearchParams): readonly VideoBackend[] {
   const requested = parameters.get('backend')
-  if (!requested) return ['html', 'mediabunny']
+  if (!requested) return ['html']
   const values = requested.split(',').map((value) => value.trim()).filter(Boolean)
-  return values.length > 0 ? values as VideoBackend[] : ['html', 'mediabunny']
+  return values.length > 0 ? values as VideoBackend[] : ['html']
 }
 
 function populateTracks(select: HTMLSelectElement, tracks: readonly MediaTrack[], allowOff: boolean): void {

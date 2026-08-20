@@ -5,15 +5,10 @@ Release numbering follows the
 
 ## Unreleased
 
-- Require the HTML route to reach `canplay`, not merely metadata.
-- Conservatively preflight present audio and video kinds through MediaBunny
-  when WebCodecs is available, preventing silent video-only acceptance while
-  retaining direct HTML for fully decodable sources.
-- Validate the container-default audio/video tracks for HTML routing, preventing
-  an unsupported default TrueHD track from being masked by a decodable alternate
-  while allowing unsupported alternates that portable HTML never selects.
-- Reject native `canplay` false positives that never decode video dimensions,
-  allowing MediaBunny or the universal transcoder fallback to take over.
+- Remove automatic backend selection and the MediaBunny/WebCodecs backend.
+- Default omitted backend selection to explicit HTML and preserve only
+  caller-supplied fallback chains.
+- Require HTML playback to reach `canplay` and produce video dimensions.
 
 ## 0.1.1
 
@@ -28,10 +23,8 @@ Release numbering follows the
 ## 0.1.0
 
 - Add the DOM-first player/controller API and explicit backend registry.
-- Add MediaBunny/WebCodecs MKV playback with direct pooled-canvas presentation.
 - Add HTML, Tizen AVPlay, webOS, and Vizio backends.
 - Add React, canvas, SolidTV, and Blits integrations.
 - Add shared SRT/WebVTT subtitle handling and Request-based transport injection.
-- Add deterministic 4K browser qualification and release evidence.
 - Add controller playback-rate support for HTML and Vizio media elements.
 - Add guarded Tizen AVPlay ownership and dedicated cookie/User-Agent streaming properties.

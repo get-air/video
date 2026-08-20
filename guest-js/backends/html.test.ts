@@ -3,11 +3,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { attachHtmlVideo } from './html'
-import { probeMediabunnyTrackDecodability } from './mediabunny'
-
-vi.mock('./mediabunny', () => ({
-  probeMediabunnyTrackDecodability: vi.fn(),
-}))
 
 function mediaElement(event: 'canplay' | 'error'): HTMLVideoElement {
   const element = document.createElement('video')
@@ -50,61 +45,17 @@ describe('HTML backend startup', () => {
       .rejects.toThrow('HTML media playback failed during startup')
   })
 
-  it('rejects silent partial playback when a present media kind cannot decode', async () => {
-    vi.stubGlobal('VideoDecoder', class VideoDecoder {})
-    vi.mocked(probeMediabunnyTrackDecodability).mockResolvedValueOnce({
-      supported: false,
-      hasVideo: true,
-      hasAudio: true,
-    })
-    const fetch = vi.fn()
-
-    await expect(attachHtmlVideo(
-      mediaElement('canplay'),
-      { source: 'movie.mkv' },
-      'html',
-      { fetch },
-    )).rejects.toMatchObject({
-      _tag: 'VideoFeatureUnavailableError',
-      feature: 'completeCodecSupport',
-    })
-
-    vi.unstubAllGlobals()
-  })
-
   it('rejects false-positive HTML startup when a video never produces dimensions', async () => {
-    vi.stubGlobal('VideoDecoder', class VideoDecoder {})
-
     const element = mediaElement('canplay')
     Object.defineProperty(element, 'videoWidth', { configurable: true, value: 0 })
     await expect(attachHtmlVideo(
       element,
       { source: 'movie.mkv' },
       'html',
-      { fetch: vi.fn() },
     )).rejects.toMatchObject({
       _tag: 'VideoFeatureUnavailableError',
       feature: 'videoFrameDecode',
     })
-
-    vi.unstubAllGlobals()
-  })
-
-  it('rejects HTML when cross-origin track verification is inconclusive', async () => {
-    vi.stubGlobal('VideoDecoder', class VideoDecoder {})
-    vi.mocked(probeMediabunnyTrackDecodability).mockResolvedValueOnce(undefined)
-
-    await expect(attachHtmlVideo(
-      mediaElement('canplay'),
-      { source: 'https://media.example/movie.mkv' },
-      'html',
-      { fetch: vi.fn() },
-    )).rejects.toMatchObject({
-      _tag: 'VideoFeatureUnavailableError',
-      feature: 'completeCodecSupport',
-    })
-
-    vi.unstubAllGlobals()
   })
 
   it('reports only portable HTML media capabilities', async () => {
