@@ -177,12 +177,15 @@ const attachWithFallback = Effect.fn('VideoPlayerService.attachWithFallback')(
     for (const adapter of candidates) {
       const route = adapterRoute(adapter)
       const startedAt = yield* Effect.sync(monotonicNow)
-      yield* Effect.sync(() => reportRoutingAttempt(options, {
-        backend: adapter.id,
-        route,
-        phase: 'probing',
-        elapsedMs: 0,
-      }))
+      const report = (phase: VideoRoutingAttempt['phase'], message?: string) =>
+        Effect.sync(() => reportRoutingAttempt(options, {
+          backend: adapter.id,
+          route,
+          phase,
+          elapsedMs: phase === 'probing' ? 0 : monotonicNow() - startedAt,
+          ...(message === undefined ? {} : { message }),
+        }))
+      yield* report('probing')
       if (options.signal?.aborted) {
         return yield* attachmentAborted(adapter.id, options.signal)
       }
@@ -202,13 +205,7 @@ const attachWithFallback = Effect.fn('VideoPlayerService.attachWithFallback')(
       }
       if (availability._tag === 'Left') {
         lastError = availability.left
-        yield* Effect.sync(() => reportRoutingAttempt(options, {
-          backend: adapter.id,
-          route,
-          phase: 'failed',
-          elapsedMs: monotonicNow() - startedAt,
-          message: availability.left.message,
-        }))
+        yield* report('failed', availability.left.message)
         continue
       }
       if (!availability.right) {
@@ -216,21 +213,10 @@ const attachWithFallback = Effect.fn('VideoPlayerService.attachWithFallback')(
           backend: adapter.id,
           message: `Video backend ${adapter.id} is not available in this runtime`,
         })
-        yield* Effect.sync(() => reportRoutingAttempt(options, {
-          backend: adapter.id,
-          route,
-          phase: 'unavailable',
-          elapsedMs: monotonicNow() - startedAt,
-          message: lastError?.message,
-        }))
+        yield* report('unavailable', lastError.message)
         continue
       }
-      yield* Effect.sync(() => reportRoutingAttempt(options, {
-        backend: adapter.id,
-        route,
-        phase: 'opening',
-        elapsedMs: monotonicNow() - startedAt,
-      }))
+      yield* report('opening')
       const result = yield* Effect.either(Effect.tryPromise({
         try: () => abortableOperation(
           options.signal,
@@ -240,25 +226,14 @@ const attachWithFallback = Effect.fn('VideoPlayerService.attachWithFallback')(
         catch: (cause) => normalizePlayerError(adapter.id, cause),
       }))
       if (result._tag === 'Right') {
-        yield* Effect.sync(() => reportRoutingAttempt(options, {
-          backend: adapter.id,
-          route,
-          phase: 'selected',
-          elapsedMs: monotonicNow() - startedAt,
-        }))
+        yield* report('selected')
         return result.right
       }
       if (options.signal?.aborted) {
         return yield* attachmentAborted(adapter.id, options.signal)
       }
       lastError = result.left
-      yield* Effect.sync(() => reportRoutingAttempt(options, {
-        backend: adapter.id,
-        route,
-        phase: 'failed',
-        elapsedMs: monotonicNow() - startedAt,
-        message: result.left.message,
-      }))
+      yield* report('failed', result.left.message)
     }
     return yield* (lastError ?? new VideoBackendUnavailableError({
       backend: 'html',
@@ -271,20 +246,9 @@ function resolveAdapters(
   options: AttachVideoOptions,
   adapters: readonly VideoBackendAdapter[],
 ): readonly VideoBackendAdapter[] {
-  const requested = requestedBackends(options)
-  const resolved: VideoBackendAdapter[] = []
-  for (const backend of requested) {
-    const choices = adapters.filter((adapter) => adapter.id === backend)
-    if (choices.length === 0) {
-      resolved.push(unavailableAdapter(backend,
-        `Video backend ${String(backend)} is not registered`))
-      continue
-    }
-    for (const adapter of choices) {
-      if (!resolved.some((candidate) => candidate.id === adapter.id)) resolved.push(adapter)
-    }
-  }
-  return resolved
+  const byId = new Map(adapters.map((adapter) => [adapter.id, adapter]))
+  return requestedBackends(options).map((backend) => byId.get(backend)
+    ?? unavailableAdapter(backend, `Video backend ${String(backend)} is not registered`))
 }
 
 function adapterRoute(adapter: VideoBackendAdapter): VideoRouteKind {
@@ -321,7 +285,7 @@ export function requestedBackends(
   options: Pick<AttachVideoOptions, 'backend' | 'fallbackBackends'>,
 ): readonly VideoBackend[] {
   const requested = Array.isArray(options.backend)
-    ? [...options.backend]
+    ? options.backend
     : options.backend ? [options.backend] : ['html']
   return [...new Set([...requested, ...(options.fallbackBackends ?? [])])]
 }

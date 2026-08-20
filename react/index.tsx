@@ -1,19 +1,6 @@
 import {
-  FocusContext,
-  init,
-  setFocus,
-  useFocusable,
-} from '@noriginmedia/norigin-spatial-navigation'
-import {
-  type ButtonHTMLAttributes,
   type CSSProperties,
-  type ForwardedRef,
-  type HTMLAttributes,
-  type InputHTMLAttributes,
-  type Ref,
-  type RefCallback,
   type ReactNode,
-  forwardRef,
   useCallback,
   useEffect,
   useInsertionEffect,
@@ -24,8 +11,6 @@ import {
 
 import {
   attachVideo,
-  registerVideoControls,
-  VIDEO_CONTROLS_ATTRIBUTE,
   type AttachVideoOptions,
   type MediaInfo,
   type MediaTrack,
@@ -36,7 +21,23 @@ import {
   type VideoFitMode,
   type VideoSource,
 } from '../guest-js/index'
+import {
+  ControlContainer,
+  FocusableButton,
+  FocusableSlider,
+  FullscreenIcon,
+  PauseIcon,
+  PlayIcon,
+  TrackButton,
+  VIDEO_CONTROLS_PROPS,
+  VolumeIcon,
+  formatBuffer,
+  formatTime,
+} from './controls'
 import playerStyles from './player.css?raw'
+
+export { VideoControlRegion, useVideoControlRegion } from './controls'
+export type { VideoControlRegionProps } from './controls'
 
 const PLAYER_STYLE_ATTRIBUTE = 'data-air-video-player-styles'
 
@@ -47,27 +48,6 @@ function installPlayerStyles(): void {
   style.setAttribute(PLAYER_STYLE_ATTRIBUTE, '')
   style.textContent = playerStyles
   document.head.append(style)
-}
-
-let spatialNavigationInitialized = false
-
-interface InitializeTvNavigationOptions {
-  debug?: boolean
-  visualDebug?: boolean
-  throttleMs?: number
-}
-
-/** Initialize Norigin once when the first TV player mounts. */
-function initializeTvNavigation(options: InitializeTvNavigationOptions = {}): void {
-  if (spatialNavigationInitialized) return
-  init({
-    debug: options.debug ?? false,
-    visualDebug: options.visualDebug ?? false,
-    throttle: options.throttleMs ?? 80,
-    throttleKeypresses: true,
-    shouldFocusDOMNode: true,
-  })
-  spatialNavigationInitialized = true
 }
 
 export interface VideoPlayerProps {
@@ -371,9 +351,9 @@ export function VideoPlayer({
       aria-label={title}
     >
       <video ref={videoRef} className="tvp-video" poster={poster} playsInline muted={muted} />
-      <div className="tvp-overlay-slot" {...videoControlsAttribute()}>{children}</div>
-      {loading && <div className="tvp-status" role="status" {...videoControlsAttribute()}><span />Loading video</div>}
-      {error && <div className="tvp-error" role="alert" {...videoControlsAttribute()}>{error}</div>}
+      <div className="tvp-overlay-slot" {...VIDEO_CONTROLS_PROPS}>{children}</div>
+      {loading && <div className="tvp-status" role="status" {...VIDEO_CONTROLS_PROPS}><span />Loading video</div>}
+      {error && <div className="tvp-error" role="alert" {...VIDEO_CONTROLS_PROPS}>{error}</div>}
       {controls && (
         <ControlContainer tvMode={tvMode} focusResetKey={reloadKey}>
             <FocusableSlider
@@ -490,234 +470,6 @@ export function TvVideoPlayer(props: Omit<VideoPlayerProps, 'tvMode'>) {
   return <VideoPlayer {...props} tvMode />
 }
 
-/**
- * Returns a callback ref that marks controls mounted anywhere in the React tree
- * as intentional player UI. It can be combined with a portal or app toolbar.
- */
-export function useVideoControlRegion<T extends HTMLElement = HTMLDivElement>(): RefCallback<T> {
-  const cleanupRef = useRef<(() => void) | undefined>(undefined)
-  return useCallback((node: T | null) => {
-    cleanupRef.current?.()
-    cleanupRef.current = node ? registerVideoControls(node) : undefined
-  }, [])
-}
-
-export interface VideoControlRegionProps extends HTMLAttributes<HTMLDivElement> {}
-
-/** A framework-owned control region that may be placed anywhere in the page. */
-export const VideoControlRegion = forwardRef(function VideoControlRegion(
-  { children, ...props }: VideoControlRegionProps,
-  forwardedRef: ForwardedRef<HTMLDivElement>,
-) {
-  const controlRef = useVideoControlRegion<HTMLDivElement>()
-  return (
-    <div {...props} ref={mergeRefs(forwardedRef, controlRef)} {...videoControlsAttribute()}>
-      {children}
-    </div>
-  )
-})
-
-interface FocusableButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  tvMode: boolean
-  focusKey: string
-  onPress: () => void
-}
-
-function FocusableButton({ tvMode, focusKey, onPress, children, ...props }: FocusableButtonProps) {
-  if (tvMode) {
-    return (
-      <TvFocusableButton focusKey={focusKey} onPress={onPress} {...props}>
-        {children}
-      </TvFocusableButton>
-    )
-  }
-  return (
-    <button
-      {...props}
-      type="button"
-      onClick={(event) => {
-        props.onClick?.(event)
-        onPress()
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
-function TvFocusableButton({ focusKey, onPress, children, ...props }: Omit<FocusableButtonProps, 'tvMode'>) {
-  const { ref, focused } = useFocusable<Record<string, never>, HTMLButtonElement>({
-    focusKey,
-    onEnterPress: onPress,
-  })
-  return (
-    <button
-      {...props}
-      ref={mergeRefs(ref)}
-      type="button"
-      data-focused={focused || undefined}
-      onClick={(event) => {
-        props.onClick?.(event)
-        onPress()
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
-interface FocusableSliderProps extends InputHTMLAttributes<HTMLInputElement> {
-  tvMode: boolean
-  focusKey: string
-  onTvLeft: () => void
-  onTvRight: () => void
-}
-
-function FocusableSlider({ tvMode, focusKey, onTvLeft, onTvRight, ...props }: FocusableSliderProps) {
-  if (tvMode) {
-    return (
-      <TvFocusableSlider
-        focusKey={focusKey}
-        onTvLeft={onTvLeft}
-        onTvRight={onTvRight}
-        {...props}
-      />
-    )
-  }
-  return <input {...props} type="range" />
-}
-
-function TvFocusableSlider({
-  focusKey,
-  onTvLeft,
-  onTvRight,
-  ...props
-}: Omit<FocusableSliderProps, 'tvMode'>) {
-  const { ref, focused } = useFocusable<Record<string, never>, HTMLInputElement>({
-    focusKey,
-    onArrowPress: (direction) => {
-      if (direction === 'left') onTvLeft()
-      else if (direction === 'right') onTvRight()
-      else return true
-      return false
-    },
-  })
-  return <input {...props} ref={mergeRefs(ref)} type="range" data-focused={focused || undefined} />
-}
-
-function ControlContainer({
-  tvMode,
-  focusResetKey,
-  children,
-}: {
-  tvMode: boolean
-  focusResetKey?: string | number
-  children: ReactNode
-}) {
-  if (tvMode) return <TvControlContainer focusResetKey={focusResetKey}>{children}</TvControlContainer>
-  return (
-    <div className="tvp-controls" aria-label="Playback controls" {...videoControlsAttribute()}>
-      {children}
-    </div>
-  )
-}
-
-function TvControlContainer({
-  focusResetKey,
-  children,
-}: {
-  focusResetKey?: string | number
-  children: ReactNode
-}) {
-  initializeTvNavigation()
-  const { ref, focusKey } = useFocusable<Record<string, never>, HTMLDivElement>({
-    focusKey: 'AIR_VIDEO_CONTROLS',
-    trackChildren: true,
-    preferredChildFocusKey: 'AIR_VIDEO_PLAY',
-    saveLastFocusedChild: true,
-    isFocusBoundary: true,
-  })
-  useEffect(() => {
-    const timer = window.setTimeout(() => setFocus('AIR_VIDEO_PLAY'), 0)
-    return () => window.clearTimeout(timer)
-  }, [focusResetKey])
-  return (
-    <FocusContext.Provider value={focusKey}>
-      <div
-        ref={mergeRefs(ref)}
-        className="tvp-controls"
-        aria-label="Playback controls"
-        {...videoControlsAttribute()}
-      >
-        {children}
-      </div>
-    </FocusContext.Provider>
-  )
-}
-
-function TrackButton({
-  tvMode,
-  focusKey,
-  label,
-  tracks,
-  allowOff = false,
-  onPress,
-}: {
-  tvMode: boolean
-  focusKey: string
-  label: string
-  tracks: MediaTrack[]
-  allowOff?: boolean
-  onPress: () => void
-}) {
-  const selected = tracks.find((track) => track.selected)
-  const language = selected?.language?.toUpperCase()
-  const value = language && language !== 'UND'
-    ? language
-    : selected?.label ?? (allowOff ? 'Off' : 'Default')
-  const description = selected?.label && selected.label !== value
-    ? `${value}, ${selected.label}`
-    : value
-  return (
-    <FocusableButton
-      tvMode={tvMode}
-      focusKey={focusKey}
-      className="tvp-track-button"
-      aria-label={`${label}: ${description}. Press to change.`}
-      onPress={onPress}
-    >
-      <strong>{label}</strong><span>{value}</span>
-    </FocusableButton>
-  )
-}
-
-function mergeRefs<T>(...refs: Array<Ref<T> | undefined>): RefCallback<T> {
-  return (node) => {
-    for (const ref of refs) {
-      if (typeof ref === 'function') ref(node)
-      else if (ref) ref.current = node
-    }
-  }
-}
-
-function videoControlsAttribute(): Record<typeof VIDEO_CONTROLS_ATTRIBUTE, string> {
-  return { [VIDEO_CONTROLS_ATTRIBUTE]: '' }
-}
-
-function formatTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return '0:00'
-  const total = Math.floor(seconds)
-  const hours = Math.floor(total / 3_600)
-  const minutes = Math.floor((total % 3_600) / 60)
-  const tail = `${hours ? String(minutes).padStart(2, '0') : minutes}:${String(total % 60).padStart(2, '0')}`
-  return hours ? `${hours}:${tail}` : tail
-}
-
-function formatBuffer(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return 'Buffering'
-  return `${Math.floor(seconds)}s buffered`
-}
-
 function toError(reason: unknown): Error {
   if (reason instanceof Error) return reason
   if (typeof reason === 'string') return new Error(reason)
@@ -735,19 +487,3 @@ function toError(reason: unknown): Error {
 }
 
 const EMPTY_MEDIA: MediaInfo = { seekable: true, live: false, tracks: [], chapters: [] }
-
-function PlayIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-}
-
-function PauseIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zm6 0h4v14h-4z" /></svg>
-}
-
-function VolumeIcon() {
-  return <svg className="tvp-volume-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5-.5a5 5 0 0 1 0 7M18.8 6a8 8 0 0 1 0 12" /></svg>
-}
-
-function FullscreenIcon() {
-  return <svg className="tvp-outline" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
-}
