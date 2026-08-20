@@ -5,6 +5,8 @@ Release numbering follows the
 
 ## Unreleased
 
+## 0.2.0
+
 - Remove automatic backend selection and the MediaBunny/WebCodecs backend.
 - Default omitted backend selection to explicit HTML and preserve only
   caller-supplied fallback chains.

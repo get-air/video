@@ -1,6 +1,6 @@
 {
   "name": "@get-air/video",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "author": "Air contributors",
   "description": "One lean DOM-first video API for HTML, native adapters, and smart TVs",
   "license": "MIT OR Apache-2.0",
