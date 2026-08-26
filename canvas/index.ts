@@ -43,7 +43,7 @@ export interface CanvasVideoController extends VideoController {
   updateLayout(): void
 }
 
-/** Transparent options shared by the Air framework and other canvas renderers. */
+/** Transparent options shared by canvas renderers. */
 export const transparentCanvasRendererOptions = Object.freeze({
   clearColor: 0x00000000,
   enableClear: true,

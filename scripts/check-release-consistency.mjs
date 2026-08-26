@@ -43,15 +43,10 @@ for (let index = 0; index < args.length; index += 1) {
 
 const packageJson = readJson('package.json')
 const packageLock = readJson('package-lock.json')
-const examplePackageJson = readJson('examples/air-framework-app/package.json')
-const examplePackageLock = readJson('examples/air-framework-app/package-lock.json')
 const changelog = readText('CHANGELOG.md')
 const lockRoot = packageLock.packages?.['']
 
 checkLocalDependencies(packageJson, 'package.json')
-checkLocalDependencies(examplePackageJson, 'examples/air-framework-app/package.json', {
-  '@get-air/video': 'file:../..',
-})
 
 if (packageJson.name !== '@get-air/video') {
   errors.push(`package.json name must be @get-air/video, found ${packageJson.name}`)
@@ -61,40 +56,6 @@ if (packageLock.name !== packageJson.name) {
 }
 if (lockRoot?.name !== packageJson.name) {
   errors.push('package-lock.json root package name does not match package.json')
-}
-
-const exampleLockRoot = examplePackageLock.packages?.['']
-const linkedCore = examplePackageLock.packages?.['../..']
-const linkedCoreEntry = examplePackageLock.packages?.['node_modules/@get-air/video']
-
-if (examplePackageJson.dependencies?.['@get-air/video'] !== 'file:../..') {
-  errors.push('the Air framework example must link this repository with @get-air/video file:../..')
-}
-if (exampleLockRoot?.dependencies?.['@get-air/video'] !== 'file:../..') {
-  errors.push('the Air framework example lock root does not preserve the local core link')
-}
-if (linkedCoreEntry?.link !== true || linkedCoreEntry?.resolved !== '../..') {
-  errors.push('the Air framework example lock does not link node_modules/@get-air/video to ../..')
-}
-
-const linkedManifestFields = [
-  'name',
-  'version',
-  'license',
-  'dependencies',
-  'devDependencies',
-  'peerDependencies',
-  'peerDependenciesMeta',
-  'engines',
-]
-const stableJson = (value) => JSON.stringify(value, (_key, child) => {
-  if (child === null || Array.isArray(child) || typeof child !== 'object') return child
-  return Object.fromEntries(Object.entries(child).sort(([left], [right]) => left.localeCompare(right)))
-})
-for (const field of linkedManifestFields) {
-  if (stableJson(linkedCore?.[field]) !== stableJson(packageJson[field])) {
-    errors.push(`the Air framework example lock has stale linked-core ${field} metadata`)
-  }
 }
 
 const versions = [

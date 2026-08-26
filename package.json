@@ -16,8 +16,7 @@
     "registry": "https://registry.npmjs.org/"
   },
   "sideEffects": [
-    "./react/player.css",
-    "./dist-js/framework.js"
+    "./react/player.css"
   ],
   "keywords": [
     "video",
@@ -51,10 +50,6 @@
     "./canvas": {
       "types": "./dist-js/canvas/index.d.ts",
       "import": "./dist-js/canvas.js"
-    },
-    "./framework": {
-      "types": "./dist-js/framework/index.d.ts",
-      "import": "./dist-js/framework.js"
     },
     "./react": {
       "types": "./dist-js/react/index.d.ts",
@@ -95,18 +90,10 @@
     "effect": "^3.22.1"
   },
   "peerDependencies": {
-    "@get-air/framework": ">=0.1.0 <0.2.0",
-    "@get-air/renderer": ">=0.1.1 <0.2.0",
     "react": ">=18.2 <20",
     "react-dom": ">=18.2 <20"
   },
   "peerDependenciesMeta": {
-    "@get-air/framework": {
-      "optional": true
-    },
-    "@get-air/renderer": {
-      "optional": true
-    },
     "react": {
       "optional": true
     },
@@ -116,8 +103,6 @@
   },
   "devDependencies": {
     "@effect/language-service": "^0.87.2",
-    "@get-air/framework": "0.1.0",
-    "@get-air/renderer": "0.1.1",
     "@rollup/plugin-typescript": "^12.0.0",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.0",

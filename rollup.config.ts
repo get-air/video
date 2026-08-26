@@ -32,7 +32,6 @@ const config: RollupOptions = {
     controls: 'guest-js/controls.ts',
     effect: 'guest-js/effect.ts',
     canvas: 'canvas/index.ts',
-    framework: 'framework/index.ts',
     react: 'react/index.tsx',
   },
   output: {
@@ -49,7 +48,6 @@ const config: RollupOptions = {
       include: [
         'guest-js/**/*.ts',
         'canvas/**/*.ts',
-        'framework/**/*.ts',
         'react/**/*.ts',
         'react/**/*.tsx',
       ],
@@ -59,8 +57,6 @@ const config: RollupOptions = {
   external: [
     /^@get-air\/http(?:\/.*)?$/,
     /^react(?:\/.*)?$/,
-    /^@get-air\/framework(?:\/.*)?$/,
-    /^@get-air\/renderer(?:\/.*)?$/,
     ...Object.keys(manifest.dependencies ?? {}),
     ...Object.keys(manifest.peerDependencies ?? {}),
   ],

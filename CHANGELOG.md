@@ -7,10 +7,7 @@ Release numbering follows the
 
 ## 0.3.0
 
-- Replace the SolidTV integration with `@get-air/video/framework` and the
-  Air-owned runtime/renderer contracts.
-- Add a literal framework `<video>` intrinsic that uses HTML playback by
-  default and accepts an installed platform video client such as Tauri.
+- Add the now-retired renderer-specific video integration.
 - Add a structural video-element controller for shared headless media controls.
 - Add backend-neutral Canvas, WebGL, and WebGPU hole-punch shader registration.
 
@@ -35,7 +32,7 @@ Release numbering follows the
 
 - Add the DOM-first player/controller API and explicit backend registry.
 - Add HTML, Tizen AVPlay, webOS, and Vizio backends.
-- Add React, canvas, SolidTV, and Blits integrations.
+- Add React, canvas, and Blits integrations.
 - Add shared SRT/WebVTT subtitle handling and Request-based transport injection.
 - Add controller playback-rate support for HTML and Vizio media elements.
 - Add guarded Tizen AVPlay ownership and dedicated cookie/User-Agent streaming properties.

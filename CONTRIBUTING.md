@@ -36,8 +36,6 @@ npm run check:release
 npm run check
 npm run build
 npm pack --dry-run --ignore-scripts
-npm ci --prefix examples/air-framework-app
-npm run build --prefix examples/air-framework-app
 ```
 
 Exercise the package CI job locally with `act` before pushing:

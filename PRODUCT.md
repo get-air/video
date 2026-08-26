@@ -20,7 +20,7 @@ One stable controller survives source and backend changes while platform adapter
 
 ## Operating Context
 
-The Air framework example is both an integration sample and an on-device playback laboratory. It must expose enough state to verify controller input, duration, seeking, backend selection, buffering, audio, and subtitles on a real television.
+The example player is both an integration sample and an on-device playback laboratory. It must expose enough state to verify controller input, duration, seeking, backend selection, buffering, audio, and subtitles on a real television.
 
 ## Capabilities and Constraints
 
@@ -38,7 +38,7 @@ The product is Air. The television interface inherits Air Horizon's black broadc
 
 ## Evidence on Hand
 
-- Working video controller, Air framework, and renderer integrations in this repository.
+- Working video controller, React, canvas, and native adapter integrations in this repository.
 - Existing Air television tokens and focus behavior in the sibling Air application.
 - Locally generated and staged media fixtures for deterministic testing.
 

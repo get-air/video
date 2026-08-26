@@ -86,7 +86,6 @@ Streaming DVR bounds match the range reported by the television firmware.
 | `@get-air/video/effect` | Effect services and typed errors |
 | `@get-air/video/react` | React player and TV focus |
 | `@get-air/video/canvas` | Framework-neutral canvas integration |
-| `@get-air/video/framework` | Air framework integration and `<video>` intrinsic |
 
 The Tauri adapter comes from
 [`@get-air/video-tauri`](https://github.com/get-air/tauri-video-plugin).

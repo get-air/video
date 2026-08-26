@@ -2,7 +2,7 @@
 
 ## Air Horizon television world
 
-The Air framework player inherits Air's broadcast control-room language: a true-black field, edge-to-edge moving image, chalk-white information, cool slate secondary text, cyan live/progress signals, and a white focus frame. The interface avoids translucent glass, decorative gradients, and rounded floating cards.
+The Air player inherits Air's broadcast control-room language: a true-black field, edge-to-edge moving image, chalk-white information, cool slate secondary text, cyan live/progress signals, and a white focus frame. The interface avoids translucent glass, decorative gradients, and rounded floating cards.
 
 ## Composition
 

@@ -14,7 +14,6 @@
   "include": [
     "guest-js/**/*.ts",
     "canvas/**/*.ts",
-    "framework/**/*.ts",
     "react/**/*",
     "scripts/**/*.ts",
     "qualification/**/*.ts",
