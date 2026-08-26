@@ -43,13 +43,13 @@ for (let index = 0; index < args.length; index += 1) {
 
 const packageJson = readJson('package.json')
 const packageLock = readJson('package-lock.json')
-const examplePackageJson = readJson('examples/solid-tv-app/package.json')
-const examplePackageLock = readJson('examples/solid-tv-app/package-lock.json')
+const examplePackageJson = readJson('examples/air-framework-app/package.json')
+const examplePackageLock = readJson('examples/air-framework-app/package-lock.json')
 const changelog = readText('CHANGELOG.md')
 const lockRoot = packageLock.packages?.['']
 
 checkLocalDependencies(packageJson, 'package.json')
-checkLocalDependencies(examplePackageJson, 'examples/solid-tv-app/package.json', {
+checkLocalDependencies(examplePackageJson, 'examples/air-framework-app/package.json', {
   '@get-air/video': 'file:../..',
 })
 
@@ -68,13 +68,13 @@ const linkedCore = examplePackageLock.packages?.['../..']
 const linkedCoreEntry = examplePackageLock.packages?.['node_modules/@get-air/video']
 
 if (examplePackageJson.dependencies?.['@get-air/video'] !== 'file:../..') {
-  errors.push('the SolidTV example must link this repository with @get-air/video file:../..')
+  errors.push('the Air framework example must link this repository with @get-air/video file:../..')
 }
 if (exampleLockRoot?.dependencies?.['@get-air/video'] !== 'file:../..') {
-  errors.push('the SolidTV example lock root does not preserve the local core link')
+  errors.push('the Air framework example lock root does not preserve the local core link')
 }
 if (linkedCoreEntry?.link !== true || linkedCoreEntry?.resolved !== '../..') {
-  errors.push('the SolidTV example lock does not link node_modules/@get-air/video to ../..')
+  errors.push('the Air framework example lock does not link node_modules/@get-air/video to ../..')
 }
 
 const linkedManifestFields = [
@@ -93,7 +93,7 @@ const stableJson = (value) => JSON.stringify(value, (_key, child) => {
 })
 for (const field of linkedManifestFields) {
   if (stableJson(linkedCore?.[field]) !== stableJson(packageJson[field])) {
-    errors.push(`the SolidTV example lock has stale linked-core ${field} metadata`)
+    errors.push(`the Air framework example lock has stale linked-core ${field} metadata`)
   }
 }
 

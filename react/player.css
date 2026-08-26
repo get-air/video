@@ -13,6 +13,8 @@
   --tvp-surface: rgb(16 16 18 / 88%);
   --tvp-danger: rgb(157 29 36 / 96%);
   --tvp-focus: #fff;
+  --tvp-live: #25c7d9;
+  --tvp-progress: var(--tvp-control);
   position: relative;
   width: 100%;
   height: 100%;
@@ -107,7 +109,7 @@
 .tvp-timeline::-webkit-slider-runnable-track {
   height: .25rem;
   background: linear-gradient(to right,
-    var(--tvp-control) 0 var(--tvp-played),
+    var(--tvp-progress) 0 var(--tvp-played),
     var(--tvp-buffer) var(--tvp-played) var(--tvp-buffered),
     var(--tvp-track) var(--tvp-buffered) 100%);
   border-radius: .125rem;
@@ -120,8 +122,13 @@
   appearance: none;
   border: 0;
   border-radius: 50%;
-  background: var(--tvp-control);
+  background: var(--tvp-progress);
 }
+
+.tvp-player[data-live="true"] { --tvp-progress: var(--tvp-live); }
+
+.tvp-timeline:disabled { cursor: default; opacity: .52; }
+.tvp-timeline:disabled::-webkit-slider-thumb { opacity: 0; }
 
 .tvp-control-row {
   display: flex;
@@ -170,6 +177,8 @@
 .tvp-track-button strong { font-size: .75rem; }
 .tvp-track-button span { overflow: hidden; color: var(--tvp-muted); text-overflow: ellipsis; white-space: nowrap; }
 .tvp-text-button { font-size: .75rem; }
+.tvp-live-button { color: #001417; background: var(--tvp-live); font-weight: 700; }
+.tvp-live-button:hover { background: #6edce7; }
 
 .tvp-volume-group { display: flex; align-items: center; gap: .375rem; }
 .tvp-volume-icon { width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }

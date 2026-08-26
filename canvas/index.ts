@@ -26,6 +26,12 @@ export interface AttachCanvasVideoOptions extends Omit<AttachVideoOptions, 'surf
   appHeight?: number
   /** Static aperture or a getter for animated/reactive layouts. */
   rect: CanvasVideoRect | (() => CanvasVideoRect)
+  /**
+   * Poll a dynamic rectangle on animation frames. Defaults on only when
+   * `rect` is a function; renderer integrations should push `updateLayout()`
+   * from their own geometry lifecycle instead.
+   */
+  continuousLayout?: boolean
   /** Optional client containing platform adapters such as Tauri. */
   client?: VideoClient
 }
@@ -37,7 +43,7 @@ export interface CanvasVideoController extends VideoController {
   updateLayout(): void
 }
 
-/** Transparent options shared by SolidTV and other Lightning renderers. */
+/** Transparent options shared by the Air framework and other canvas renderers. */
 export const transparentCanvasRendererOptions = Object.freeze({
   clearColor: 0x00000000,
   enableClear: true,
@@ -70,7 +76,15 @@ export function canvasRectToViewport(
 export async function attachCanvasVideo(
   options: AttachCanvasVideoOptions,
 ): Promise<CanvasVideoController> {
-  const { canvas, rect, client, appWidth = 1920, appHeight = 1080, ...videoOptions } = options
+  const {
+    canvas,
+    rect,
+    client,
+    continuousLayout = typeof rect === 'function',
+    appWidth = 1920,
+    appHeight = 1080,
+    ...videoOptions
+  } = options
   if (!(canvas instanceof HTMLCanvasElement)) {
     throw new TypeError('attachCanvasVideo requires the renderer canvas')
   }
@@ -92,16 +106,24 @@ export async function attachCanvasVideo(
   let controller: VideoController | undefined
   let frame: number | undefined
   let destroyed = false
-  let lastRect = ''
+  let lastX = Number.NaN
+  let lastY = Number.NaN
+  let lastWidth = Number.NaN
+  let lastHeight = Number.NaN
 
   const updateLayout = () => {
     if (destroyed) return
     const logical = typeof rect === 'function' ? rect() : rect
     const viewport = canvasRectToViewport(canvas, logical, appWidth, appHeight)
-    const signature = [viewport.x, viewport.y, viewport.width, viewport.height]
-      .map((value) => value.toFixed(3)).join(':')
-    if (signature === lastRect) return
-    lastRect = signature
+    const x = Math.round(viewport.x * 1_000)
+    const y = Math.round(viewport.y * 1_000)
+    const width = Math.round(viewport.width * 1_000)
+    const height = Math.round(viewport.height * 1_000)
+    if (x === lastX && y === lastY && width === lastWidth && height === lastHeight) return
+    lastX = x
+    lastY = y
+    lastWidth = width
+    lastHeight = height
     anchor.style.left = `${viewport.x}px`
     anchor.style.top = `${viewport.y}px`
     anchor.style.width = `${viewport.width}px`
@@ -116,13 +138,11 @@ export async function attachCanvasVideo(
 
   updateLayout()
   try {
-    controller = await (client?.attach(anchor, {
+    const attach = client ? client.attach.bind(client) : attachVideo
+    controller = await attach(anchor, {
       ...videoOptions,
       surfaceMode: 'transparent-canvas',
-    }) ?? attachVideo(anchor, {
-      ...videoOptions,
-      surfaceMode: 'transparent-canvas',
-    }))
+    })
   } catch (error) {
     destroyed = true
     releaseTransparency()
@@ -147,7 +167,7 @@ export async function attachCanvasVideo(
     updateLayout: { value: updateLayout },
     destroy: { value: destroy },
   })
-  frame = requestAnimationFrame(tick)
+  if (continuousLayout) frame = requestAnimationFrame(tick)
   return controller as CanvasVideoController
 }
 

@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -32,8 +32,8 @@ jobs:
           esac
       - run: npm run ci
       - run: npm ci
-        working-directory: examples/solid-tv-app
+        working-directory: examples/air-framework-app
       - run: npm run build
-        working-directory: examples/solid-tv-app
+        working-directory: examples/air-framework-app
       - name: Publish to npm
         run: npm publish --access public --provenance

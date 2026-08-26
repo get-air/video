@@ -18,8 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -44,6 +44,6 @@ jobs:
           npm install "$GITHUB_WORKSPACE/$package_tarball" >/dev/null
           node --input-type=module -e "await import('@get-air/video'); await import('@get-air/video/effect'); await import('@get-air/video/canvas')"
       - run: npm ci
-        working-directory: examples/solid-tv-app
+        working-directory: examples/air-framework-app
       - run: npm run build
-        working-directory: examples/solid-tv-app
+        working-directory: examples/air-framework-app

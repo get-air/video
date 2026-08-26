@@ -20,11 +20,13 @@ One stable controller survives source and backend changes while platform adapter
 
 ## Operating Context
 
-The SolidTV example is both an integration sample and an on-device playback laboratory. It must expose enough state to verify controller input, duration, seeking, backend selection, buffering, audio, and subtitles on a real television.
+The Air framework example is both an integration sample and an on-device playback laboratory. It must expose enough state to verify controller input, duration, seeking, backend selection, buffering, audio, and subtitles on a real television.
 
 ## Capabilities and Constraints
 
 - Playback UI must work without touch, hover, or a pointer.
+- Live channels must distinguish a non-seekable feed from a moving DVR window,
+  expose a legible live offset, and provide an explicit remote-operable Go Live action.
 - Vizio uses the platform HTML video pipeline; native and transcode paths are
   supplied by explicit external adapters.
 - The authored television surface is 1920×1080 with overscan-safe margins.
@@ -36,7 +38,7 @@ The product is Air. The television interface inherits Air Horizon's black broadc
 
 ## Evidence on Hand
 
-- Working video controller and SolidTV renderer integrations in this repository.
+- Working video controller, Air framework, and renderer integrations in this repository.
 - Existing Air television tokens and focus behavior in the sibling Air application.
 - Locally generated and staged media fixtures for deterministic testing.
 

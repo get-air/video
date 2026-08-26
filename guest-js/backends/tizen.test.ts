@@ -6,10 +6,11 @@ import { attachTizenVideo } from './tizen'
 
 type AvPlayState = 'NONE' | 'IDLE' | 'READY' | 'PLAYING' | 'PAUSED'
 
-function mockAvPlay(options: { prepareFails?: boolean } = {}) {
+function mockAvPlay(options: { prepareFails?: boolean; live?: boolean; liveWindow?: string } = {}) {
   let state: AvPlayState = 'NONE'
   let listener: {
     oncurrentplaytime?: (milliseconds: number) => void
+    onstreamcompleted?: () => void
   } = {}
   const currentTracks = [
     { type: 'VIDEO', index: 0, extra_info: '{"fourCC":"H264","Width":3840,"Height":2160}' },
@@ -43,6 +44,8 @@ function mockAvPlay(options: { prepareFails?: boolean } = {}) {
       return totalTracks
     }),
     getCurrentStreamInfo: vi.fn(() => currentTracks),
+    getStreamingProperty: vi.fn((type: 'IS_LIVE' | 'GET_LIVE_DURATION') =>
+      type === 'IS_LIVE' ? options.live ? 'true' : 'false' : options.liveWindow ?? ''),
     setStreamingProperty: vi.fn(),
     setSilentSubtitle: vi.fn(),
     setSelectTrack: vi.fn(),
@@ -53,6 +56,7 @@ function mockAvPlay(options: { prepareFails?: boolean } = {}) {
   return {
     api,
     emitCurrentTime: (milliseconds: number) => listener.oncurrentplaytime?.(milliseconds),
+    emitCompleted: () => listener.onstreamcompleted?.(),
   }
 }
 
@@ -192,6 +196,34 @@ describe('Samsung Tizen AVPlay backend', () => {
     await active.destroy()
     expect(avplay.api.stop).toHaveBeenCalledOnce()
     expect(avplay.api.close).toHaveBeenCalledOnce()
+  })
+
+  it('publishes and clamps Samsung live DVR windows without reporting an end', async () => {
+    const avplay = mockAvPlay({ live: true, liveWindow: '1180000|1245000' })
+    avplay.api.getDuration.mockReturnValue(0)
+    Object.defineProperty(window, 'webapis', {
+      configurable: true,
+      value: { avplay: avplay.api },
+    })
+    const element = videoAnchor()
+    const ended = vi.fn()
+    element.addEventListener('ended', ended)
+    const controller = await attachTizenVideo(element, {
+      source: 'https://media.example/live.m3u8',
+    })
+
+    expect(controller.media).toMatchObject({
+      durationSeconds: undefined,
+      live: true,
+      seekable: true,
+      seekableStartSeconds: 1180,
+      seekableEndSeconds: 1245,
+    })
+    await controller.seek(2000)
+    expect(avplay.api.seekTo).toHaveBeenLastCalledWith(1_245_000, expect.any(Function), expect.any(Function))
+    avplay.emitCompleted()
+    expect(ended).not.toHaveBeenCalled()
+    await controller.destroy()
   })
 
   it('removes the companion object when asynchronous preparation fails', async () => {

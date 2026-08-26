@@ -66,6 +66,36 @@ function backend(element: HTMLVideoElement, id: string) {
 }
 
 describe('SwitchingVideoController', () => {
+  it('keeps composed metadata stable until the backend reports a change', () => {
+    const element = document.createElement('video')
+    const active = backend(element, 'metadata')
+    const controller = new SwitchingVideoController(
+      active.value,
+      {
+        source: 'movie.mkv',
+        subtitles: [{ id: 'english', content: 'WEBVTT\n\n' }],
+      },
+      () => Effect.succeed(active.value),
+      { fetch: globalThis.fetch },
+    )
+
+    const capabilities = controller.capabilities
+    const media = controller.media
+    const tracks = controller.tracks
+    expect(controller.capabilities).toBe(capabilities)
+    expect(controller.media).toBe(media)
+    expect(controller.tracks).toBe(tracks)
+    expect(media.tracks).toBe(tracks)
+
+    active.value.dispatchEvent(new CustomEvent('trackchange', {
+      detail: { kind: 'audio', trackId: 'audio-1' },
+    }))
+
+    expect(controller.media).not.toBe(media)
+    expect(controller.tracks).not.toBe(tracks)
+    expect(controller.media.tracks).toBe(controller.tracks)
+  })
+
   it('keeps its identity while replacing a source and backend', async () => {
     const element = document.createElement('video')
     const first = backend(element, 'first')

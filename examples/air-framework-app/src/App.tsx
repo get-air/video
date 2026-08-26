@@ -6,24 +6,29 @@ FIRST VIEWPORT: Video dominates the upper 744px; progress, time, transport, trac
 FORM: An Air Horizon control-room extension, inheriting the established television world rather than introducing a new visual identity.
 */
 
-import { Row, useFocusManager } from '@solidtv/solid/primitives'
-import { createEffect, createSignal, onCleanup } from 'solid-js'
+import { createEffect, createSignal, onCleanup } from '@get-air/framework'
 import type {
   MediaTrack,
+  SubtitleCue,
   VideoBackend,
   VideoController,
   VideoFitMode,
 } from '@get-air/video'
-import {
-  createSolidVideo,
-  type SolidRendererLike,
-  type SolidVideoRect,
-} from '@get-air/video/solid'
+import '@get-air/video/framework'
+import type {
+  FrameworkVideoElementController,
+  FrameworkVideoRect,
+} from '@get-air/video/framework'
 
 const SCREEN = { width: 1920, height: 1080 } as const
 const SAFE_X = 80
 const CONTENT_WIDTH = SCREEN.width - SAFE_X * 2
-const videoRect: SolidVideoRect = { x: SAFE_X, y: 96, width: CONTENT_WIDTH, height: 744 }
+const videoRect: FrameworkVideoRect = {
+  x: SAFE_X,
+  y: 96,
+  width: CONTENT_WIDTH,
+  height: 744,
+}
 
 const COLOR = {
   ink: 0x000000ff,
@@ -60,6 +65,7 @@ declare global {
 }
 
 function ControlButton(props: {
+  readonly x: number
   readonly width: number
   readonly label: string
   readonly value?: () => string
@@ -69,13 +75,17 @@ function ControlButton(props: {
   const [focused, setFocused] = createSignal(false)
   return (
     <view
+      x={props.x}
       width={props.width}
       height={76}
       color={focused() ? COLOR.focus : COLOR.panel}
       borderRadius={2}
       border={{ width: focused() ? 3 : 1, color: focused() ? COLOR.chalk : 0xffffff24 }}
+      focusable
       autofocus={props.autofocus}
-      onFocusChanged={(hasFocus) => {
+      role="button"
+      announce={[props.label, props.value?.() ?? '', 'button']}
+      onFocusChanged={(hasFocus: boolean) => {
         setFocused(hasFocus)
         if (hasFocus) document.documentElement.dataset.airFocus = props.label
       }}
@@ -115,25 +125,31 @@ function ControlButton(props: {
   )
 }
 
-export function App(props: { renderer: SolidRendererLike }) {
-  useFocusManager({
-    Left: ['ArrowLeft', 37],
-    Right: ['ArrowRight', 39],
-    Up: ['ArrowUp', 38],
-    Down: ['ArrowDown', 40],
-    Enter: ['Enter', 13],
-    Last: ['Backspace', 'Escape', 8, 27, 461],
-  })
-
+export function App() {
   const parameters = new URLSearchParams(window.location.search)
   const initialSource = parameters.get('source') ?? '/sample.mkv'
   const title = parameters.get('title') ?? 'Vizio playback lab'
   const subtitleSource = parameters.get('subtitle')
   const telemetryUrl = parameters.get('telemetry')
+  const subtitles = subtitleSource ? [{
+    id: 'external-english',
+    src: subtitleSource,
+    label: parameters.get('subtitleLabel') ?? 'English',
+    language: parameters.get('subtitleLanguage') ?? 'en',
+    default: true,
+  }] : []
   const [source, setSource] = createSignal(initialSource)
   const [backends, setBackends] = createSignal<readonly VideoBackend[]>(parseBackends(parameters))
+  const [videoElement, setVideoElement] = createSignal<FrameworkVideoElementController>()
+  const [loading, setLoading] = createSignal(true)
+  const [videoError, setVideoError] = createSignal<unknown>()
+  const [subtitleCues, setSubtitleCues] = createSignal<readonly SubtitleCue[]>([])
   const [currentTime, setCurrentTime] = createSignal(0)
   const [duration, setDuration] = createSignal(0)
+  const [live, setLive] = createSignal(false)
+  const [seekable, setSeekable] = createSignal(true)
+  const [seekStart, setSeekStart] = createSignal(0)
+  const [seekEnd, setSeekEnd] = createSignal(0)
   const [bufferedAhead, setBufferedAhead] = createSignal(0)
   const [playing, setPlaying] = createSignal(false)
   const [backend, setBackend] = createSignal('starting')
@@ -143,24 +159,12 @@ export function App(props: { renderer: SolidRendererLike }) {
   const [subtitleLabel, setSubtitleLabel] = createSignal(subtitleSource ? 'English' : 'Off')
   const [fitMode, setFitMode] = createSignal<VideoFitMode>('fit')
 
-  const video = createSolidVideo(() => ({
-    renderer: props.renderer,
-    rect: videoRect,
-    source: source(),
-    backend: backends(),
-    autoplay: false,
-    deviceProfile: 'tv',
-    subtitles: subtitleSource ? [{
-      id: 'external-english',
-      src: subtitleSource,
-      label: parameters.get('subtitleLabel') ?? 'English',
-      language: parameters.get('subtitleLanguage') ?? 'en',
-      default: true,
-    }] : [],
-  }))
-
-  const controller = (): VideoController | undefined => video.controller()
-  const progress = () => duration() > 0 ? Math.min(1, Math.max(0, currentTime() / duration())) : 0
+  const controller = (): VideoController | undefined => videoElement()?.playback()
+  const progress = () => {
+    const start = live() ? seekStart() : 0
+    const end = live() ? seekEnd() : duration()
+    return end > start ? Math.min(1, Math.max(0, (currentTime() - start) / (end - start))) : 0
+  }
 
   const emitTelemetry = (event: string, detail?: Record<string, unknown>) => {
     if (!telemetryUrl) return
@@ -170,6 +174,7 @@ export function App(props: { renderer: SolidRendererLike }) {
       url.searchParams.set('backend', backend())
       url.searchParams.set('current', currentTime().toFixed(3))
       url.searchParams.set('duration', duration().toFixed(3))
+      url.searchParams.set('live', String(live()))
       if (detail) url.searchParams.set('detail', JSON.stringify(detail))
       void fetch(url, { mode: 'no-cors', keepalive: true }).catch(() => undefined)
     } catch {
@@ -211,9 +216,17 @@ export function App(props: { renderer: SolidRendererLike }) {
   })
 
   const seekBy = (seconds: number) => run('seek', async (active) => {
+    if (!active.media.seekable) {
+      report('This live channel does not expose a DVR window.', 'warning')
+      return
+    }
+    const start = active.media.seekableStartSeconds ?? 0
+    const end = active.media.seekableEndSeconds
+      ?? active.media.durationSeconds
+      ?? Number.POSITIVE_INFINITY
     const target = Math.min(
-      duration() || Number.POSITIVE_INFINITY,
-      Math.max(0, currentTime() + seconds),
+      end,
+      Math.max(start, currentTime() + seconds),
     )
     await active.seek(target)
     setCurrentTime(target)
@@ -280,13 +293,16 @@ export function App(props: { renderer: SolidRendererLike }) {
 
   let boundController: VideoController | undefined
   let releaseController = () => undefined
-  const bindController = () => {
-    const active = video.controller()
+  const bindController = (active = controller()) => {
     if (!active || active === boundController) return
     releaseController()
     boundController = active
     setBackend(active.capabilities.backend)
     setDuration(active.media.durationSeconds ?? finiteDuration(active.element.duration))
+    setLive(active.media.live)
+    setSeekable(active.media.seekable)
+    setSeekStart(active.media.seekableStartSeconds ?? 0)
+    setSeekEnd(active.media.seekableEndSeconds ?? active.media.durationSeconds ?? 0)
     setCurrentTime(active.element.currentTime || 0)
     setPlaying(!active.element.paused)
     const selectedAudio = active.tracks.find((track) => track.kind === 'audio' && track.selected)
@@ -299,12 +315,15 @@ export function App(props: { renderer: SolidRendererLike }) {
     emitTelemetry('ready', {
       backend: active.capabilities.backend,
       duration: active.media.durationSeconds ?? finiteDuration(active.element.duration),
+      live: active.media.live,
+      seekable: active.media.seekable,
     })
 
     const unsubscribers = [
       active.on('timeupdate', (event) => setCurrentTime(event.detail.currentTime)),
       active.on('bufferprogress', (event) => setBufferedAhead(event.detail.bufferedAhead)),
       active.on('backendchange', (event) => setBackend(event.detail.backend)),
+      active.on('subtitlecuechange', (event) => setSubtitleCues(event.detail.cues)),
       active.on('trackchange', () => {
         const selected = active.tracks.find((track) => track.kind === 'audio' && track.selected)
         if (selected) setAudioLabel(trackLabel(selected))
@@ -313,8 +332,13 @@ export function App(props: { renderer: SolidRendererLike }) {
     ]
     const syncMetadata = () => {
       setDuration(active.media.durationSeconds ?? finiteDuration(active.element.duration))
+      setLive(active.media.live)
+      setSeekable(active.media.seekable)
+      setSeekStart(active.media.seekableStartSeconds ?? 0)
+      setSeekEnd(active.media.seekableEndSeconds ?? active.media.durationSeconds ?? 0)
       setCurrentTime(active.element.currentTime || 0)
       setBufferedAhead(active.bufferedAhead())
+      setLoading(false)
     }
     const syncPlaying = () => setPlaying(!active.element.paused)
     const showBuffering = () => report('Buffering from the playback source...', 'warning')
@@ -340,22 +364,30 @@ export function App(props: { renderer: SolidRendererLike }) {
       active.element.removeEventListener('seeked', showSeeked)
     }
   }
-  bindController()
-  const controllerPoll = window.setInterval(bindController, 100)
-  onCleanup(() => {
-    window.clearInterval(controllerPoll)
-    releaseController()
-  })
 
-  createEffect(() => {
-    const failure = video.error()
-    if (failure !== undefined) report(errorMessage(failure), 'error')
+  const onVideoReady = (element: FrameworkVideoElementController) => {
+    setVideoElement(element)
+    setLoading(false)
+    setVideoError(undefined)
+    bindController(element.playback())
+  }
+
+  const onVideoError = (cause: unknown) => {
+    setLoading(false)
+    setVideoError(cause)
+    report(errorMessage(cause), 'error')
+  }
+
+  onCleanup(() => {
+    releaseController()
   })
 
   createEffect(() => {
     document.documentElement.dataset.airBackend = backend()
     document.documentElement.dataset.airCurrentTime = currentTime().toFixed(3)
     document.documentElement.dataset.airDuration = duration().toFixed(3)
+    document.documentElement.dataset.airLive = String(live())
+    document.documentElement.dataset.airSeekable = String(seekable())
     document.documentElement.dataset.airBufferedAhead = bufferedAhead().toFixed(3)
     document.documentElement.dataset.airPlaying = String(playing())
     document.documentElement.dataset.airAudio = audioLabel()
@@ -378,10 +410,17 @@ export function App(props: { renderer: SolidRendererLike }) {
     else if (key === 'MediaRewind' || code === 412 || code === 227) commands.rewind()
     else if (key === 'MediaFastForward' || code === 417 || code === 228) commands.forward()
     else if (key.toLowerCase() === 'n') {
+      setLoading(true)
+      setVideoError(undefined)
       setSource((value) => value === '/sample.mkv' ? '/sample-2.mkv' : '/sample.mkv')
       report('Loaded the alternate local test clip.')
-    } else if (key === '1') setBackends(['vizio', 'html'])
-    else if (key === '2') setBackends(['html'])
+    } else if (key === '1') {
+      setLoading(true)
+      setBackends(['vizio', 'html'])
+    } else if (key === '2') {
+      setLoading(true)
+      setBackends(['html'])
+    }
   }
   window.addEventListener('keydown', keydown)
   onCleanup(() => window.removeEventListener('keydown', keydown))
@@ -392,6 +431,10 @@ export function App(props: { renderer: SolidRendererLike }) {
       backend: backend(),
       currentTime: currentTime(),
       duration: duration(),
+      live: live(),
+      seekable: seekable(),
+      seekableStart: seekStart(),
+      seekableEnd: seekEnd(),
       bufferedAhead: bufferedAhead(),
       playing: playing(),
       audio: audioLabel(),
@@ -422,6 +465,24 @@ export function App(props: { renderer: SolidRendererLike }) {
         height={videoRect.height}
         color={COLOR.ink}
       />
+      <video
+        id="feature-presentation"
+        x={videoRect.x}
+        y={videoRect.y}
+        width={videoRect.width}
+        height={videoRect.height}
+        src={source()}
+        backend={backends()}
+        autoplay={false}
+        controls={false}
+        fit="fit"
+        deviceProfile="tv"
+        subtitles={subtitles}
+        aria-label={title}
+        controllerRef={setVideoElement}
+        onReady={onVideoReady}
+        onError={onVideoError}
+      />
       <text
         x={SAFE_X}
         y={28}
@@ -444,13 +505,13 @@ export function App(props: { renderer: SolidRendererLike }) {
         fontSize={20}
         textAlign="right"
         contain="both"
-        color={video.error() ? COLOR.error : video.loading() ? COLOR.amber : COLOR.focus}
+        color={videoError() ? COLOR.error : loading() ? COLOR.amber : COLOR.focus}
         maxLines={1}
       >
-        {video.loading() ? 'CONNECTING' : video.error() ? 'PLAYBACK ERROR' : `LIVE / ${backend().toUpperCase()}`}
+        {loading() ? 'CONNECTING' : videoError() ? 'PLAYBACK ERROR' : `LIVE / ${backend().toUpperCase()}`}
       </text>
 
-      {video.subtitleCues().length > 0 && (
+      {subtitleCues().length > 0 && (
         <view x={250} y={738} width={1420} height={82} color={0x000000d9} borderRadius={2}>
           <text
             x={32}
@@ -465,7 +526,7 @@ export function App(props: { renderer: SolidRendererLike }) {
             color={COLOR.chalk}
             maxLines={2}
           >
-            {video.subtitleCues().map((cue) => cue.text).join(' ')}
+            {subtitleCues().map((cue) => cue.text).join(' ')}
           </text>
         </view>
       )}
@@ -483,7 +544,7 @@ export function App(props: { renderer: SolidRendererLike }) {
           fontSize={21}
           color={COLOR.chalk}
         >
-          {formatTime(currentTime())}
+          {live() ? liveOffset(currentTime(), seekEnd()) : formatTime(currentTime())}
         </text>
         <text
           x={1540}
@@ -496,7 +557,7 @@ export function App(props: { renderer: SolidRendererLike }) {
           contain="both"
           color={COLOR.muted}
         >
-          {formatTime(duration())}
+          {live() ? 'LIVE' : formatTime(duration())}
         </text>
 
         <text
@@ -513,29 +574,43 @@ export function App(props: { renderer: SolidRendererLike }) {
           BUFFER {bufferedAhead().toFixed(1)} SEC
         </text>
 
-        <Row x={SAFE_X} y={70} width={CONTENT_WIDTH} height={76} gap={18} scroll="none">
-          <ControlButton width={190} label="-10 SEC" onEnter={commands.rewind} />
+        <view x={SAFE_X} y={70} width={CONTENT_WIDTH} height={76}>
+          <ControlButton x={0} width={190} label="-10 SEC" onEnter={commands.rewind} />
           <ControlButton
+            x={208}
             width={240}
             label={playing() ? 'PAUSE' : 'PLAY'}
             autofocus
             onEnter={commands.toggle}
           />
-          <ControlButton width={190} label="+10 SEC" onEnter={commands.forward} />
-          <ControlButton width={290} label="AUDIO" value={audioLabel} onEnter={commands.audio} />
           <ControlButton
+            x={466}
+            width={190}
+            label="+10 SEC"
+            onEnter={commands.forward}
+          />
+          <ControlButton
+            x={674}
+            width={290}
+            label="AUDIO"
+            value={audioLabel}
+            onEnter={commands.audio}
+          />
+          <ControlButton
+            x={982}
             width={320}
             label="SUBTITLES"
             value={subtitleLabel}
             onEnter={commands.subtitle}
           />
           <ControlButton
+            x={1320}
             width={220}
             label="PICTURE"
             value={() => fitMode() === 'fit' ? 'Fit' : 'Fill'}
             onEnter={commands.fit}
           />
-        </Row>
+        </view>
 
         <text
           x={SAFE_X}
@@ -583,6 +658,11 @@ function formatTime(seconds: number): string {
   return hours > 0
     ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
     : `${minutes}:${String(remainder).padStart(2, '0')}`
+}
+
+function liveOffset(current: number, edge: number): string {
+  const offset = Math.max(0, edge - current)
+  return offset <= 3 ? 'ON AIR' : `-${formatTime(offset)}`
 }
 
 function errorMessage(value: unknown): string {

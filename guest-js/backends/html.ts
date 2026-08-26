@@ -1,5 +1,7 @@
 import { VideoFeatureUnavailableError } from '../errors'
+import { VideoEventTarget } from '../events'
 import { bufferedAhead } from '../index'
+import { startController } from './lifecycle'
 import type {
   AttachVideoOptions,
   MediaInfo,
@@ -9,7 +11,6 @@ import type {
   SessionStats,
   TrackKind,
   BackendVideoController,
-  VideoControllerEventMap,
   VideoControlsTarget,
   VideoFitMode,
   VideoSource,
@@ -24,17 +25,10 @@ export async function attachHtmlVideo(
   options: AttachVideoOptions,
   backend: HtmlBackend,
 ): Promise<BackendVideoController> {
-  const controller = new HtmlVideoController(element, options, backend)
-  try {
-    await controller.start()
-    return controller
-  } catch (error) {
-    await controller.destroy().catch(() => undefined)
-    throw error
-  }
+  return startController(new HtmlVideoController(element, options, backend))
 }
 
-class HtmlVideoController extends EventTarget implements BackendVideoController {
+class HtmlVideoController extends VideoEventTarget implements BackendVideoController {
   readonly element: HTMLVideoElement
   readonly sessionId = `html-${Date.now()}-${++htmlSessionSequence}`
   readonly capabilities: PlayerCapabilities
@@ -236,16 +230,6 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
     this.element.load()
   }
 
-  on<K extends keyof VideoControllerEventMap>(
-    type: K,
-    listener: (event: VideoControllerEventMap[K]) => void,
-    options?: AddEventListenerOptions,
-  ): () => void {
-    const eventListener = listener as EventListener
-    this.addEventListener(type, eventListener, options)
-    return () => this.removeEventListener(type, eventListener, options)
-  }
-
   #listen(type: string, listener: EventListener): void {
     this.element.addEventListener(type, listener)
     this.#listeners.push([type, listener])
@@ -283,6 +267,12 @@ class HtmlVideoController extends EventTarget implements BackendVideoController 
     this.#media.durationSeconds = Number.isFinite(this.element.duration) ? this.element.duration : undefined
     this.#media.live = this.element.duration === Infinity
     this.#media.seekable = this.element.seekable.length > 0 || !this.#media.live
+    this.#media.seekableStartSeconds = this.element.seekable.length > 0
+      ? this.element.seekable.start(0)
+      : undefined
+    this.#media.seekableEndSeconds = this.element.seekable.length > 0
+      ? this.element.seekable.end(this.element.seekable.length - 1)
+      : this.#media.durationSeconds
     this.#media.container = inferContainer(this.element.currentSrc || this.element.src)
     const tracks: MediaTrack[] = []
     if (this.element.videoWidth > 0) {

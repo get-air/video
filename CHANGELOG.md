@@ -5,6 +5,15 @@ Release numbering follows the
 
 ## Unreleased
 
+## 0.3.0
+
+- Replace the SolidTV integration with `@get-air/video/framework` and the
+  Air-owned runtime/renderer contracts.
+- Add a literal framework `<video>` intrinsic that uses HTML playback by
+  default and accepts an installed platform video client such as Tauri.
+- Add a structural video-element controller for shared headless media controls.
+- Add backend-neutral Canvas, WebGL, and WebGPU hole-punch shader registration.
+
 ## 0.2.0
 
 - Remove automatic backend selection and the MediaBunny/WebCodecs backend.

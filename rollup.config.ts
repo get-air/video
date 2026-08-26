@@ -29,10 +29,10 @@ const cssAsText: Plugin = {
 const config: RollupOptions = {
   input: {
     index: 'guest-js/index.ts',
+    controls: 'guest-js/controls.ts',
     effect: 'guest-js/effect.ts',
     canvas: 'canvas/index.ts',
-    blits: 'blits/index.ts',
-    solid: 'solid/index.ts',
+    framework: 'framework/index.ts',
     react: 'react/index.tsx',
   },
   output: {
@@ -49,8 +49,7 @@ const config: RollupOptions = {
       include: [
         'guest-js/**/*.ts',
         'canvas/**/*.ts',
-        'blits/**/*.ts',
-        'solid/**/*.ts',
+        'framework/**/*.ts',
         'react/**/*.ts',
         'react/**/*.tsx',
       ],
@@ -60,8 +59,8 @@ const config: RollupOptions = {
   external: [
     /^@get-air\/http(?:\/.*)?$/,
     /^react(?:\/.*)?$/,
-    /^solid-js(?:\/.*)?$/,
-    /^@solidtv\/(?:renderer|solid)(?:\/.*)?$/,
+    /^@get-air\/framework(?:\/.*)?$/,
+    /^@get-air\/renderer(?:\/.*)?$/,
     ...Object.keys(manifest.dependencies ?? {}),
     ...Object.keys(manifest.peerDependencies ?? {}),
   ],

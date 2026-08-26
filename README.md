@@ -59,6 +59,25 @@ await player.seek(90)
 await player.load('https://media.example/next.mp4')
 ```
 
+## Live playback
+
+Backends report live state and DVR capability through `player.media`:
+
+```ts
+if (player.media.live) {
+  console.log(player.media.seekable) // true only when a DVR window exists
+  console.log(player.media.seekableStartSeconds, player.media.seekableEndSeconds)
+}
+```
+
+`durationSeconds` is undefined for live media. Seekable live windows use
+absolute, moving bounds; non-seekable channels reject direct seek operations
+with the normal typed unsupported-feature error. The React and TV players show
+a live-relative timeline and a keyboard/remote-accessible Go Live action.
+
+Samsung AVPlay uses `IS_LIVE` and `GET_LIVE_DURATION`, so HLS, DASH, and Smooth
+Streaming DVR bounds match the range reported by the television firmware.
+
 ## Entrypoints
 
 | Entrypoint | Purpose |
@@ -67,8 +86,7 @@ await player.load('https://media.example/next.mp4')
 | `@get-air/video/effect` | Effect services and typed errors |
 | `@get-air/video/react` | React player and TV focus |
 | `@get-air/video/canvas` | Framework-neutral canvas integration |
-| `@get-air/video/solid` | SolidTV helpers |
-| `@get-air/video/blits` | Blits helpers |
+| `@get-air/video/framework` | Air framework integration and `<video>` intrinsic |
 
 The Tauri adapter comes from
 [`@get-air/video-tauri`](https://github.com/get-air/tauri-video-plugin).

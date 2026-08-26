@@ -1,4 +1,6 @@
 import { VideoBackendUnavailableError, VideoFeatureUnavailableError } from '../errors'
+import { VideoEventTarget } from '../events'
+import { startController } from './lifecycle'
 import type {
   AttachVideoOptions,
   MediaInfo,
@@ -8,7 +10,6 @@ import type {
   SessionStats,
   TrackKind,
   BackendVideoController,
-  VideoControllerEventMap,
   VideoControlsTarget,
   VideoFitMode,
   VideoSource,
@@ -45,6 +46,7 @@ interface AvPlayApi {
   getCurrentTime(): number
   getTotalTrackInfo(): AvPlayTrackInfo[]
   getCurrentStreamInfo(): AvPlayTrackInfo[]
+  getStreamingProperty(type: 'IS_LIVE' | 'GET_LIVE_DURATION'): string
   setStreamingProperty(type: 'COOKIE' | 'USER_AGENT', value: string): void
   setSilentSubtitle(onoff: boolean): void
   setSelectTrack(type: 'AUDIO' | 'TEXT', index: number): void
@@ -80,17 +82,10 @@ export async function attachTizenVideo(
       message: 'Samsung AVPlay is not available; load $WEBAPIS/webapis/webapis.js on a Tizen TV',
     })
   }
-  const controller = new TizenVideoController(element, options, avplay)
-  try {
-    await controller.start()
-    return controller
-  } catch (error) {
-    await controller.destroy().catch(() => undefined)
-    throw error
-  }
+  return startController(new TizenVideoController(element, options, avplay))
 }
 
-class TizenVideoController extends EventTarget implements BackendVideoController {
+class TizenVideoController extends VideoEventTarget implements BackendVideoController {
   readonly element: HTMLVideoElement
   readonly sessionId = `tizen-${Date.now()}-${++tizenSessionSequence}`
   readonly capabilities: PlayerCapabilities = {
@@ -159,13 +154,14 @@ class TizenVideoController extends EventTarget implements BackendVideoController
       },
       oncurrentplaytime: (milliseconds) => {
         this.#currentTime = milliseconds / 1000
+        this.#refreshLiveWindow()
         if (!this.#hasTotalTrackInfo) this.#tryRefreshTotalTrackInfo()
         this.dispatchEvent(new CustomEvent('timeupdate', { detail: { currentTime: this.#currentTime } }))
       },
       onstreamcompleted: () => {
         this.#playing = false
         this.element.dispatchEvent(new Event('pause'))
-        this.element.dispatchEvent(new Event('ended'))
+        if (!this.#media.live) this.element.dispatchEvent(new Event('ended'))
       },
       onerror: (error) => {
         this.dispatchEvent(new CustomEvent('error', {
@@ -175,9 +171,17 @@ class TizenVideoController extends EventTarget implements BackendVideoController
     })
     this.refreshLayout()
     await new Promise<void>((resolve, reject) => this.#avplay.prepareAsync(resolve, reject))
-    this.#media.durationSeconds = this.#millisecondsToOptionalSeconds(this.#avplay.getDuration())
-    this.#media.live = this.#media.durationSeconds === undefined
-    this.#media.seekable = !this.#media.live
+    const durationMilliseconds = this.#avplay.getDuration()
+    this.#media.live = this.#isLive(durationMilliseconds)
+    this.#media.durationSeconds = this.#media.live
+      ? undefined
+      : this.#millisecondsToOptionalSeconds(durationMilliseconds)
+    if (this.#media.live) this.#refreshLiveWindow()
+    else {
+      this.#media.seekable = true
+      this.#media.seekableStartSeconds = 0
+      this.#media.seekableEndSeconds = this.#media.durationSeconds
+    }
     this.#media.container = inferContainer(source.uri)
     this.#refreshCurrentTrackInfo()
     if (source.startPositionSeconds !== undefined) await this.seek(source.startPositionSeconds)
@@ -209,10 +213,22 @@ class TizenVideoController extends EventTarget implements BackendVideoController
   }
 
   async seek(positionSeconds: number): Promise<void> {
+    if (!this.#media.seekable) {
+      throw new VideoFeatureUnavailableError({
+        backend: 'tizen',
+        feature: 'seeking',
+        message: 'The active AVPlay stream does not expose a seekable window',
+      })
+    }
+    const minimum = this.#media.seekableStartSeconds ?? 0
+    const maximum = this.#media.seekableEndSeconds
+      ?? this.#media.durationSeconds
+      ?? Number.POSITIVE_INFINITY
+    const target = clamp(positionSeconds, minimum, maximum)
     await new Promise<void>((resolve, reject) => {
-      this.#avplay.seekTo(Math.max(0, Math.round(positionSeconds * 1000)), resolve, reject)
+      this.#avplay.seekTo(Math.max(0, Math.round(target * 1000)), resolve, reject)
     })
-    this.#currentTime = Math.max(0, positionSeconds)
+    this.#currentTime = Math.max(0, target)
   }
 
   async selectTrack(kind: TrackKind, trackId?: string): Promise<void> {
@@ -376,16 +392,6 @@ class TizenVideoController extends EventTarget implements BackendVideoController
     }
   }
 
-  on<K extends keyof VideoControllerEventMap>(
-    type: K,
-    listener: (event: VideoControllerEventMap[K]) => void,
-    options?: AddEventListenerOptions,
-  ): () => void {
-    const eventListener = listener as EventListener
-    this.addEventListener(type, eventListener, options)
-    return () => this.removeEventListener(type, eventListener, options)
-  }
-
   readonly #handleResize = (): void => this.refreshLayout()
 
   #acquireAvPlay(): void {
@@ -461,6 +467,34 @@ class TizenVideoController extends EventTarget implements BackendVideoController
 
   #millisecondsToOptionalSeconds(milliseconds: number): number | undefined {
     return milliseconds > 0 ? milliseconds / 1000 : undefined
+  }
+
+  #isLive(durationMilliseconds: number): boolean {
+    try {
+      const value = this.#avplay.getStreamingProperty('IS_LIVE')
+      if (/^(1|true|yes)$/i.test(value.trim())) return true
+      if (/^(0|false|no)$/i.test(value.trim())) return false
+    } catch {
+      // Older firmware and non-adaptive sources can reject this property.
+    }
+    return durationMilliseconds <= 0
+  }
+
+  #refreshLiveWindow(): void {
+    if (!this.#media.live) return
+    try {
+      const [startText, endText] = this.#avplay.getStreamingProperty('GET_LIVE_DURATION').split('|')
+      const start = Number(startText)
+      const end = Number(endText)
+      const valid = Number.isFinite(start) && Number.isFinite(end) && end > start
+      this.#media.seekable = valid
+      this.#media.seekableStartSeconds = valid ? start / 1000 : undefined
+      this.#media.seekableEndSeconds = valid ? end / 1000 : undefined
+    } catch {
+      this.#media.seekable = false
+      this.#media.seekableStartSeconds = undefined
+      this.#media.seekableEndSeconds = undefined
+    }
   }
 }
 

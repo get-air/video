@@ -24,7 +24,7 @@ Releases, npm publication, provenance verification, or credential cleanup.
 1. Update `package.json`, both root version views in `package-lock.json`, and
    the exact `## X.Y.Z` changelog entry.
 2. Run `npm run check:release`, type/Effect diagnostics, tests, build, pack
-   inspection, the SolidTV example, audits, and boundary scans.
+   inspection, the Air framework example, audits, and boundary scans.
 3. Run the real 3840x2160 MediaBunny qualification with the repository's FPS,
    drop, range-request, geometry, and zero-copy thresholds.
 4. Exercise the affected workflow locally with `act`.

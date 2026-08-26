@@ -78,25 +78,9 @@ interface FocusableButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export function FocusableButton({ tvMode, focusKey, onPress, children, ...props }: FocusableButtonProps) {
-  if (tvMode) {
-    return (
-      <TvFocusableButton focusKey={focusKey} onPress={onPress} {...props}>
-        {children}
-      </TvFocusableButton>
-    )
-  }
-  return (
-    <button
-      {...props}
-      type="button"
-      onClick={(event) => {
-        props.onClick?.(event)
-        onPress()
-      }}
-    >
-      {children}
-    </button>
-  )
+  return tvMode
+    ? <TvFocusableButton focusKey={focusKey} onPress={onPress} {...props}>{children}</TvFocusableButton>
+    : <VideoButton onPress={onPress} {...props}>{children}</VideoButton>
 }
 
 function TvFocusableButton({ focusKey, onPress, children, ...props }: Omit<FocusableButtonProps, 'tvMode'>) {
@@ -104,20 +88,26 @@ function TvFocusableButton({ focusKey, onPress, children, ...props }: Omit<Focus
     focusKey,
     onEnterPress: onPress,
   })
-  return (
-    <button
-      {...props}
-      ref={ref}
-      type="button"
-      data-focused={focused || undefined}
-      onClick={(event) => {
-        props.onClick?.(event)
-        onPress()
-      }}
-    >
-      {children}
-    </button>
-  )
+  return <VideoButton controlRef={ref} focused={focused} onPress={onPress} {...props}>
+    {children}
+  </VideoButton>
+}
+
+function VideoButton({
+  controlRef,
+  focused,
+  onPress,
+  children,
+  ...props
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  controlRef?: Ref<HTMLButtonElement>
+  focused?: boolean
+  onPress: () => void
+}) {
+  return <button {...props} ref={controlRef} type="button" data-focused={focused || undefined} onClick={(event) => {
+    props.onClick?.(event)
+    onPress()
+  }}>{children}</button>
 }
 
 interface FocusableSliderProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -128,17 +118,9 @@ interface FocusableSliderProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export function FocusableSlider({ tvMode, focusKey, onTvLeft, onTvRight, ...props }: FocusableSliderProps) {
-  if (tvMode) {
-    return (
-      <TvFocusableSlider
-        focusKey={focusKey}
-        onTvLeft={onTvLeft}
-        onTvRight={onTvRight}
-        {...props}
-      />
-    )
-  }
-  return <input {...props} type="range" />
+  return tvMode
+    ? <TvFocusableSlider focusKey={focusKey} onTvLeft={onTvLeft} onTvRight={onTvRight} {...props} />
+    : <RangeInput {...props} />
 }
 
 function TvFocusableSlider({
@@ -156,7 +138,18 @@ function TvFocusableSlider({
       return false
     },
   })
-  return <input {...props} ref={ref} type="range" data-focused={focused || undefined} />
+  return <RangeInput controlRef={ref} focused={focused} {...props} />
+}
+
+function RangeInput({
+  controlRef,
+  focused,
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & {
+  controlRef?: Ref<HTMLInputElement>
+  focused?: boolean
+}) {
+  return <input {...props} ref={controlRef} type="range" data-focused={focused || undefined} />
 }
 
 export function ControlContainer({
@@ -169,11 +162,7 @@ export function ControlContainer({
   children: ReactNode
 }) {
   if (tvMode) return <TvControlContainer focusResetKey={focusResetKey}>{children}</TvControlContainer>
-  return (
-    <div className="tvp-controls" aria-label="Playback controls" {...VIDEO_CONTROLS_PROPS}>
-      {children}
-    </div>
-  )
+  return <Controls>{children}</Controls>
 }
 
 function TvControlContainer({
@@ -197,16 +186,15 @@ function TvControlContainer({
   }, [focusResetKey])
   return (
     <FocusContext.Provider value={focusKey}>
-      <div
-        ref={ref}
-        className="tvp-controls"
-        aria-label="Playback controls"
-        {...VIDEO_CONTROLS_PROPS}
-      >
-        {children}
-      </div>
+      <Controls controlRef={ref}>{children}</Controls>
     </FocusContext.Provider>
   )
+}
+
+function Controls({ controlRef, children }: { controlRef?: Ref<HTMLDivElement>; children: ReactNode }) {
+  return <div ref={controlRef} className="tvp-controls" aria-label="Playback controls" {...VIDEO_CONTROLS_PROPS}>
+    {children}
+  </div>
 }
 
 export function TrackButton({

@@ -8,6 +8,7 @@ import {
   VideoLoadError,
   type VideoPlayerError,
 } from './errors'
+import { VideoEventTarget } from './events'
 import type {
   AttachVideoOptions,
   BackendVideoController,
@@ -33,12 +34,21 @@ type AttachBackend = (
 ) => Effect.Effect<BackendVideoController, VideoPlayerError>
 type ControllerState = 'active' | 'loading' | 'load-failed' | 'destroyed'
 
+interface ControllerMetadata {
+  generation: number
+  sourceCapabilities: PlayerCapabilities
+  sourceTracks: readonly MediaTrack[]
+  capabilities: PlayerCapabilities
+  media: MediaInfo
+  tracks: readonly MediaTrack[]
+}
+
 /**
  * Stable public controller that can replace its backend without replacing UI
  * references or event subscriptions. Backend instances remain intentionally
  * private so every load follows the same Effect-backed selection path.
  */
-export class SwitchingVideoController extends EventTarget implements VideoController {
+export class SwitchingVideoController extends VideoEventTarget implements VideoController {
   readonly element: HTMLVideoElement
   #active: BackendVideoController | undefined
   #options: AttachVideoOptions
@@ -53,6 +63,8 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
   #subtitleCues: readonly SubtitleCue[] = []
   #visibleCues: readonly SubtitleCue[] = []
   #abortSignal?: AbortSignal
+  #metadataGeneration = 0
+  #metadata?: ControllerMetadata
 
   constructor(
     active: BackendVideoController,
@@ -85,24 +97,15 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
   )
 
   readonly capabilitiesEffect = Effect.fn('SwitchingVideoController.capabilities')(
-    () => this.#readActive('read capabilities', (active) => {
-      if (!this.#options.subtitles?.length) return active.capabilities
-      return { ...active.capabilities, subtitleTrackSelection: true }
-    }),
+    () => this.#readActive('read capabilities', (active) => this.#readMetadata(active).capabilities),
   )
 
   readonly mediaEffect = Effect.fn('SwitchingVideoController.media')(
-    () => this.#readActive('read media information', (active) => ({
-      ...active.media,
-      tracks: [...active.tracks, ...this.#externalTracks()],
-    })),
+    () => this.#readActive('read media information', (active) => this.#readMetadata(active).media),
   )
 
   readonly tracksEffect = Effect.fn('SwitchingVideoController.tracks')(
-    () => this.#readActive('read tracks', (active) => [
-      ...active.tracks,
-      ...this.#externalTracks(),
-    ]),
+    () => this.#readActive('read tracks', (active) => this.#readMetadata(active).tracks),
   )
 
   get sessionId(): string { return runVideoEffectSync(this.sessionIdEffect()) }
@@ -119,78 +122,41 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
     return runVideoEffectSync(this.tracksEffect())
   }
 
-  readonly playEffect = Effect.fn('SwitchingVideoController.play')(
-    () => this.#tryPromise('play video', (active) => active.play()),
-  )
-
-  readonly pauseEffect = Effect.fn('SwitchingVideoController.pause')(
-    () => this.#trySync('pause video', (active) => active.pause()),
-  )
-
-  readonly seekEffect = Effect.fn('SwitchingVideoController.seek')(
-    (positionSeconds: number) => this.#tryPromise(
-      'seek video',
-      (active) => active.seek(positionSeconds),
-    ),
-  )
-
-  readonly selectTrackEffect = Effect.fn('SwitchingVideoController.selectTrack')(
-    (kind: TrackKind, trackId?: string) => this.#tryPromise(
-      'select a track',
-      (active) => this.#selectTrack(active, kind, trackId),
-    ),
-  )
-
-  readonly setVolumeEffect = Effect.fn('SwitchingVideoController.setVolume')(
-    (volume: number) => this.#tryPromise(
-      'set volume',
-      (active) => active.setVolume(volume),
-    ),
-  )
-
-  readonly setPlaybackRateEffect = Effect.fn('SwitchingVideoController.setPlaybackRate')(
-    (rate: number) => this.#tryPromise(
-      'set playback rate',
-      (active) => active.setPlaybackRate(rate),
-    ),
-  )
-
-  readonly setVideoFitEffect = Effect.fn('SwitchingVideoController.setVideoFit')(
-    (mode: VideoFitMode) => this.#tryPromise(
-      'set video fit',
-      (active) => active.setVideoFit(mode),
-    ),
-  )
-
-  readonly setVideoZoomEffect = Effect.fn('SwitchingVideoController.setVideoZoom')(
-    (scale: number) => this.#tryPromise(
-      'set video zoom',
-      (active) => active.setVideoZoom(scale),
-    ),
-  )
-
-  readonly statsEffect = Effect.fn('SwitchingVideoController.stats')(
-    () => this.#tryPromise('read video statistics', (active) => active.stats()),
-  )
-
-  readonly bufferedAheadEffect = Effect.fn('SwitchingVideoController.bufferedAhead')(
-    () => this.#trySync('read buffered duration', (active) => active.bufferedAhead()),
-  )
-
-  readonly playbackQualityEffect = Effect.fn('SwitchingVideoController.playbackQuality')(
-    () => this.#trySync('read playback quality', (active) => active.playbackQuality()),
-  )
-
-  readonly refreshLayoutEffect = Effect.fn('SwitchingVideoController.refreshLayout')(
-    () => this.#trySync('refresh video layout', (active) => active.refreshLayout()),
-  )
-
-  readonly registerControlsEffect = Effect.fn('SwitchingVideoController.registerControls')(
-    (target: VideoControlsTarget) => this.#trySync(
-      'register video controls',
-      (active) => active.registerControls(target),
-    ),
-  )
+  readonly playEffect = this.#promiseOperation(
+    'SwitchingVideoController.play', 'play video', (active) => active.play())
+  readonly pauseEffect = this.#syncOperation(
+    'SwitchingVideoController.pause', 'pause video', (active) => active.pause())
+  readonly seekEffect = this.#promiseOperation(
+    'SwitchingVideoController.seek', 'seek video', (active, position: number) => active.seek(position))
+  readonly selectTrackEffect = this.#promiseOperation(
+    'SwitchingVideoController.selectTrack', 'select a track',
+    (active, kind: TrackKind, id?: string) => this.#selectTrack(active, kind, id))
+  readonly setVolumeEffect = this.#promiseOperation(
+    'SwitchingVideoController.setVolume', 'set volume',
+    (active, volume: number) => active.setVolume(volume))
+  readonly setPlaybackRateEffect = this.#promiseOperation(
+    'SwitchingVideoController.setPlaybackRate', 'set playback rate',
+    (active, rate: number) => active.setPlaybackRate(rate))
+  readonly setVideoFitEffect = this.#promiseOperation(
+    'SwitchingVideoController.setVideoFit', 'set video fit',
+    (active, mode: VideoFitMode) => active.setVideoFit(mode))
+  readonly setVideoZoomEffect = this.#promiseOperation(
+    'SwitchingVideoController.setVideoZoom', 'set video zoom',
+    (active, scale: number) => active.setVideoZoom(scale))
+  readonly statsEffect = this.#promiseOperation(
+    'SwitchingVideoController.stats', 'read video statistics', (active) => active.stats())
+  readonly bufferedAheadEffect = this.#syncOperation(
+    'SwitchingVideoController.bufferedAhead', 'read buffered duration',
+    (active) => active.bufferedAhead())
+  readonly playbackQualityEffect = this.#syncOperation(
+    'SwitchingVideoController.playbackQuality', 'read playback quality',
+    (active) => active.playbackQuality())
+  readonly refreshLayoutEffect = this.#syncOperation(
+    'SwitchingVideoController.refreshLayout', 'refresh video layout',
+    (active) => active.refreshLayout())
+  readonly registerControlsEffect = this.#syncOperation(
+    'SwitchingVideoController.registerControls', 'register video controls',
+    (active, target: VideoControlsTarget) => active.registerControls(target))
 
   play(): Promise<void> { return runVideoEffectPromise(this.playEffect()) }
   pause(): void { runVideoEffectSync(this.pauseEffect()) }
@@ -276,6 +242,7 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
         controller.#subtitleTrack = undefined
         controller.#subtitleCues = []
         controller.#visibleCues = []
+        controller.#invalidateMetadata()
         controller.#state = 'active'
         controller.#stateCause = undefined
         controller.#forwardEvents(active)
@@ -326,6 +293,7 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
     }
     this.#subtitleTrack = undefined
     this.#subtitleCues = []
+    this.#invalidateMetadata()
     this.#publishCues([])
     if (active.capabilities.subtitleTrackSelection) {
       await active.selectTrack(kind, trackId)
@@ -359,16 +327,6 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
     return runVideoEffectPromise(this.destroyEffect())
   }
 
-  on<K extends keyof VideoControllerEventMap>(
-    type: K,
-    listener: (event: VideoControllerEventMap[K]) => void,
-    options?: AddEventListenerOptions,
-  ): () => void {
-    const eventListener = listener as EventListener
-    this.addEventListener(type, eventListener, options)
-    return () => this.removeEventListener(type, eventListener, options)
-  }
-
   async #selectExternalSubtitle(
     active: BackendVideoController,
     track: ExternalSubtitleTrack,
@@ -383,6 +341,7 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
       endSeconds: entry.to / 1000,
       text: entry.text,
     }))
+    this.#invalidateMetadata()
     // Disable an embedded subtitle renderer before emitting external cues.
     await active.selectTrack('subtitle', undefined).catch(() => undefined)
     this.dispatchEvent(new CustomEvent('trackchange', {
@@ -402,7 +361,7 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
     return response.text()
   }
 
-  #externalTracks(): MediaTrack[] {
+  #externalTracks(): readonly MediaTrack[] {
     return (this.#options.subtitles ?? []).map((track, index) => ({
       id: track.id,
       kind: 'subtitle',
@@ -423,6 +382,8 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
         if (type === 'timeupdate') {
           const detail = (event as VideoControllerEventMap['timeupdate']).detail
           this.#updateSubtitleCues(detail.currentTime)
+        } else if (type === 'trackchange') {
+          this.#invalidateMetadata()
         }
         this.dispatchEvent(new CustomEvent(type, { detail: event.detail }))
       }))
@@ -439,10 +400,55 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
 
   #updateSubtitleCues(currentTime: number): void {
     if (!this.#subtitleTrack) return
-    const visible = this.#subtitleCues.filter((cue) =>
-      cue.startSeconds <= currentTime && cue.endSeconds > currentTime)
-    if (sameCues(visible, this.#visibleCues)) return
+    let visibleCount = 0
+    let unchanged = true
+    for (const cue of this.#subtitleCues) {
+      if (cue.startSeconds > currentTime || cue.endSeconds <= currentTime) continue
+      if (cue.id !== this.#visibleCues[visibleCount]?.id) unchanged = false
+      visibleCount += 1
+    }
+    if (unchanged && visibleCount === this.#visibleCues.length) return
+    const visible: SubtitleCue[] = []
+    for (const cue of this.#subtitleCues) {
+      if (cue.startSeconds <= currentTime && cue.endSeconds > currentTime) visible.push(cue)
+    }
     this.#publishCues(visible)
+  }
+
+  #invalidateMetadata(): void {
+    this.#metadataGeneration += 1
+  }
+
+  #readMetadata(active: BackendVideoController): ControllerMetadata {
+    const sourceCapabilities = active.capabilities
+    const sourceMedia = active.media
+    const sourceTracks = active.tracks
+    const cached = this.#metadata
+    if (cached?.generation === this.#metadataGeneration
+      && cached.sourceCapabilities === sourceCapabilities
+      && cached.sourceTracks === sourceTracks
+      && cached.tracks.length === sourceTracks.length + (this.#options.subtitles?.length ?? 0)
+      && sourceTracks.every((track, index) => track === cached.tracks[index])
+      && cached.media.durationSeconds === sourceMedia.durationSeconds
+      && cached.media.seekable === sourceMedia.seekable
+      && cached.media.seekableStartSeconds === sourceMedia.seekableStartSeconds
+      && cached.media.seekableEndSeconds === sourceMedia.seekableEndSeconds
+      && cached.media.live === sourceMedia.live
+      && cached.media.container === sourceMedia.container
+      && cached.media.chapters === sourceMedia.chapters) return cached
+    const tracks = [...sourceTracks, ...this.#externalTracks()]
+    const capabilities = this.#options.subtitles?.length
+      && !sourceCapabilities.subtitleTrackSelection
+      ? { ...sourceCapabilities, subtitleTrackSelection: true }
+      : sourceCapabilities
+    return this.#metadata = {
+      generation: this.#metadataGeneration,
+      sourceCapabilities,
+      sourceTracks,
+      capabilities,
+      tracks,
+      media: { ...sourceMedia, tracks },
+    }
   }
 
   #publishCues(cues: readonly SubtitleCue[]): void {
@@ -492,6 +498,28 @@ export class SwitchingVideoController extends EventTarget implements VideoContro
       try: () => run(this.#requireActive(operation)),
       catch: (cause) => this.#normalizeOperationError(operation, cause),
     })
+  }
+
+  #promiseOperation<Args extends readonly unknown[], A>(
+    span: string,
+    operation: string,
+    run: (active: BackendVideoController, ...args: Args) => Promise<A>,
+  ): (...args: Args) => Effect.Effect<A, VideoPlayerError> {
+    return Effect.fn(span)((...args: Args) => this.#tryPromise(
+      operation,
+      (active) => run(active, ...args),
+    ))
+  }
+
+  #syncOperation<Args extends readonly unknown[], A>(
+    span: string,
+    operation: string,
+    run: (active: BackendVideoController, ...args: Args) => A,
+  ): (...args: Args) => Effect.Effect<A, VideoPlayerError> {
+    return Effect.fn(span)((...args: Args) => this.#trySync(
+      operation,
+      (active) => run(active, ...args),
+    ))
   }
 
   #requireActive(operation: string): BackendVideoController {
@@ -592,10 +620,6 @@ function failureOrCause<E>(cause: Cause.Cause<E>): E | unknown {
 
 function subtitleFormat(track: ExternalSubtitleTrack): 'vtt' | 'srt' {
   return track.src?.toLowerCase().split(/[?#]/, 1)[0]?.endsWith('.srt') ? 'srt' : 'vtt'
-}
-
-function sameCues(left: readonly SubtitleCue[], right: readonly SubtitleCue[]): boolean {
-  return left.length === right.length && left.every((cue, index) => cue.id === right[index]?.id)
 }
 
 function errorMessage(error: unknown): string {

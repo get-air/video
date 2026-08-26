@@ -16,7 +16,7 @@ interface VideoClient {
 ```
 
 Clients do not mutate global state. Pass the same client to imperative,
-React, canvas, SolidTV, and Blits integrations.
+React, canvas, Air framework, and Blits integrations.
 
 ## Attachment options
 
@@ -115,6 +115,24 @@ interface VideoController {
 }
 ```
 
+`MediaInfo` distinguishes finite media, non-seekable live channels, and moving
+live DVR windows:
+
+```ts
+interface MediaInfo {
+  durationSeconds?: number
+  seekable: boolean
+  seekableStartSeconds?: number
+  seekableEndSeconds?: number
+  live: boolean
+  // tracks, chapters, container...
+}
+```
+
+Live media has no finite `durationSeconds`. When `seekable` is true, callers
+must clamp absolute seeks to the current start/end bounds because the window
+can move while playback continues.
+
 `load` replaces the active backend session without replacing the public
 controller, DOM anchor, or event subscriptions. Because two renderers cannot
 safely own one anchor at once, replacement closes the previous backend first.
@@ -180,15 +198,27 @@ provided as a registry layer; the Promise client executes this same Effect
 implementation and converts its error channel to ordinary thrown error objects
 at the JavaScript boundary.
 
-## Framework injection
+## Air framework `<video>` intrinsic
 
 ```tsx
-<VideoPlayer
-  client={videoClient}
-  source={movie}
-  options={{ backend: ['html', 'tauri'] }}
+import '@get-air/video/framework'
+
+<video
+  src={movie.uri}
+  x={80}
+  y={96}
+  width={1760}
+  height={744}
+  autoplay
 />
 ```
 
-`AttachCanvasVideoOptions` and therefore SolidTV/Blits attachment options also
-accept `client`.
+Importing `@get-air/video/framework` registers the literal JSX intrinsic.
+Browser applications use the HTML backend. Tauri applications call
+`installTauriFrameworkVideo()` from `@get-air/video-tauri/framework` before
+mounting; the same tag then uses the native Tauri backend. Headless controls
+consume the intrinsic's structural controller through its `controllerRef`
+prop, leaving renderer-node refs unambiguous.
+
+`AttachCanvasVideoOptions` and framework/Blits attachment options also accept
+an explicit client.

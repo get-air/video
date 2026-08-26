@@ -119,6 +119,10 @@ export function VideoPlayer({
     let lastMediaTracks: readonly MediaTrack[] | undefined
     let lastMediaChapters: MediaInfo['chapters'] | undefined
     let lastMediaDuration: number | undefined
+    let lastMediaSeekable: boolean | undefined
+    let lastMediaLive: boolean | undefined
+    let lastSeekableStart: number | undefined
+    let lastSeekableEnd: number | undefined
     let lastMediaContainer: string | undefined
     const abort = new AbortController()
 
@@ -130,12 +134,20 @@ export function VideoPlayer({
         || latest.tracks !== lastMediaTracks
         || latest.chapters !== lastMediaChapters
         || latest.durationSeconds !== lastMediaDuration
+        || latest.seekable !== lastMediaSeekable
+        || latest.live !== lastMediaLive
+        || latest.seekableStartSeconds !== lastSeekableStart
+        || latest.seekableEndSeconds !== lastSeekableEnd
         || latest.container !== lastMediaContainer) {
         lastMediaTracks = latest.tracks
         lastMediaChapters = latest.chapters
         lastMediaDuration = latest.durationSeconds
+        lastMediaSeekable = latest.seekable
+        lastMediaLive = latest.live
+        lastSeekableStart = latest.seekableStartSeconds
+        lastSeekableEnd = latest.seekableEndSeconds
         lastMediaContainer = latest.container
-        setMedia({ ...latest, tracks: [...latest.tracks], chapters: [...latest.chapters] })
+        setMedia({ ...latest })
       }
       const quality = controller.playbackQuality()
       const position = quality.mediaTimeSeconds ?? element.currentTime
@@ -145,7 +157,7 @@ export function VideoPlayer({
     const handleTime = (event: Event) => {
       const detail = (event as CustomEvent<{ currentTime?: number }>).detail
       if (Number.isFinite(detail?.currentTime)) setCurrentTime(Math.max(0, detail.currentTime ?? 0))
-      else update()
+      update()
     }
     const handleError = (event: Event) => {
       const detail = (event as CustomEvent<{ message?: string }>).detail
@@ -165,19 +177,14 @@ export function VideoPlayer({
       setCapabilities(undefined)
       setZoom(1)
       try {
-        const controller = await (client?.attach(videoElement, {
+        const attach = client ? client.attach.bind(client) : attachVideo
+        const controller = await attach(videoElement, {
           ...optionsRef.current,
           source,
           autoplay: false,
           deviceProfile: tvMode ? 'tv' : 'auto',
           signal: abort.signal,
-        }) ?? attachVideo(videoElement, {
-          ...optionsRef.current,
-          source,
-          autoplay: false,
-          deviceProfile: tvMode ? 'tv' : 'auto',
-          signal: abort.signal,
-        }))
+        })
         if (cancelled) {
           await controller.destroy()
           return
@@ -259,13 +266,16 @@ export function VideoPlayer({
 
   const seekTo = useCallback(async (seconds: number) => {
     const controller = controllerRef.current
-    if (!controller) return
-    const duration = media.durationSeconds ?? Number.POSITIVE_INFINITY
-    const target = Math.min(duration, Math.max(0, seconds))
+    if (!controller || !media.seekable) return
+    const minimum = media.seekableStartSeconds ?? 0
+    const maximum = media.seekableEndSeconds
+      ?? media.durationSeconds
+      ?? Number.POSITIVE_INFINITY
+    const target = Math.min(maximum, Math.max(minimum, seconds))
     setCurrentTime(target)
     setScrubTime(undefined)
     await controller.seek(target)
-  }, [media.durationSeconds])
+  }, [media.durationSeconds, media.seekable, media.seekableEndSeconds, media.seekableStartSeconds])
 
   const seekRelative = useCallback((delta: number) => {
     void seekTo(currentTime + delta)
@@ -310,9 +320,16 @@ export function VideoPlayer({
   }, [])
 
   const duration = media.durationSeconds ?? 0
+  const seekStart = media.seekableStartSeconds ?? 0
+  const seekEnd = media.seekableEndSeconds ?? duration
+  const seekSpan = Math.max(0, seekEnd - seekStart)
+  const canSeek = media.seekable && (media.live ? seekSpan > 0 : duration > 0)
   const shownTime = scrubTime ?? currentTime
-  const playedPercent = duration > 0 ? Math.min(100, (shownTime / duration) * 100) : 0
-  const bufferedPercent = duration > 0 ? Math.min(100, (bufferedTime / duration) * 100) : 0
+  const timelineValue = canSeek ? Math.min(seekEnd, Math.max(seekStart, shownTime)) : seekStart
+  const playedPercent = canSeek ? Math.min(100, Math.max(0, (timelineValue - seekStart) / seekSpan * 100)) : 0
+  const bufferedPercent = canSeek
+    ? Math.min(100, Math.max(0, (bufferedTime - seekStart) / seekSpan * 100))
+    : 0
   const audioTracks = useMemo(() => media.tracks.filter((track) => track.kind === 'audio'), [media])
   const subtitleTracks = useMemo(
     () => media.tracks.filter((track) => track.kind === 'subtitle'),
@@ -325,10 +342,10 @@ export function VideoPlayer({
     if (event.key === ' ' || event.key.toLowerCase() === 'k' || event.key === 'MediaPlayPause') {
       event.preventDefault()
       void togglePlayback()
-    } else if (!tvMode && event.key === 'ArrowLeft') {
+    } else if (!tvMode && canSeek && event.key === 'ArrowLeft') {
       event.preventDefault()
       seekRelative(-10)
-    } else if (!tvMode && event.key === 'ArrowRight') {
+    } else if (!tvMode && canSeek && event.key === 'ArrowRight') {
       event.preventDefault()
       seekRelative(10)
     } else if (event.key.toLowerCase() === 'f') {
@@ -344,6 +361,7 @@ export function VideoPlayer({
       data-controls-visible={!playing || controlsVisible}
       data-loading={loading}
       data-playing={playing}
+      data-live={media.live}
       onKeyDown={handleKeyDown}
       onMouseMove={revealControls}
       onPointerDown={revealControls}
@@ -360,11 +378,13 @@ export function VideoPlayer({
               tvMode={tvMode}
               focusKey="AIR_VIDEO_TIMELINE"
               className="tvp-timeline"
-              min={0}
-              max={Math.max(duration, 0.01)}
+              min={seekStart}
+              max={Math.max(seekEnd, seekStart + 0.01)}
               step={0.1}
-              value={shownTime}
-              aria-label="Seek"
+              value={timelineValue}
+              disabled={!canSeek}
+              aria-label={media.live ? 'Live seek' : 'Seek'}
+              aria-valuetext={media.live ? liveTimeLabel(timelineValue, seekEnd) : formatTime(timelineValue)}
               style={{
                 '--tvp-played': `${playedPercent}%`,
                 '--tvp-buffered': `${bufferedPercent}%`,
@@ -372,8 +392,8 @@ export function VideoPlayer({
               onChange={(event) => setScrubTime(Number(event.currentTarget.value))}
               onPointerUp={() => scrubTime !== undefined && void seekTo(scrubTime)}
               onKeyUp={(event) => {
-                if (event.key === 'Home') void seekTo(0)
-                if (event.key === 'End') void seekTo(duration)
+                if (event.key === 'Home') void seekTo(seekStart)
+                if (event.key === 'End') void seekTo(seekEnd)
               }}
               onTvLeft={() => seekRelative(-10)}
               onTvRight={() => seekRelative(10)}
@@ -389,8 +409,21 @@ export function VideoPlayer({
                 {playing ? <PauseIcon /> : <PlayIcon />}
               </FocusableButton>
               <output className="tvp-time" aria-live="off">
-                {formatTime(shownTime)} <span>/</span> {formatTime(duration)}
+                {media.live
+                  ? formatLiveTime(timelineValue, seekEnd)
+                  : <>{formatTime(shownTime)} <span>/</span> {formatTime(duration)}</>}
               </output>
+              {media.live && canSeek && (
+                <FocusableButton
+                  tvMode={tvMode}
+                  focusKey="AIR_VIDEO_LIVE"
+                  className="tvp-text-button tvp-live-button"
+                  aria-label="Go to live"
+                  onPress={() => void seekTo(seekEnd)}
+                >
+                  Live
+                </FocusableButton>
+              )}
               <span className="tvp-buffer-label">{formatBuffer(controllerRef.current?.bufferedAhead() ?? 0)}</span>
               <div className="tvp-spacer" />
               {capabilities?.audioTrackSelection !== false && audioTracks.length > 0 && (
@@ -487,3 +520,14 @@ function toError(reason: unknown): Error {
 }
 
 const EMPTY_MEDIA: MediaInfo = { seekable: true, live: false, tracks: [], chapters: [] }
+
+function liveTimeLabel(currentTime: number, liveEdge: number): string {
+  const offset = Math.max(0, liveEdge - currentTime)
+  return offset <= 3 ? 'Live' : `${formatTime(offset)} behind live`
+}
+
+function formatLiveTime(currentTime: number, liveEdge: number): ReactNode {
+  const offset = Math.max(0, liveEdge - currentTime)
+  if (offset <= 3) return 'LIVE'
+  return <>-{formatTime(offset)} <span>/</span> LIVE</>
+}
