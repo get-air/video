@@ -5,6 +5,10 @@ Release numbering follows the
 
 ## Unreleased
 
+- Remove the retired canvas/Blits custom-renderer entrypoint and
+  `transparent-canvas` attachment mode. The supported presentation surface is
+  now an ordinary DOM video element, with the React wrapper built on top.
+
 ## 0.3.0
 
 - Add the now-retired renderer-specific video integration.
