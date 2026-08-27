@@ -143,7 +143,6 @@ export interface AttachVideoOptions {
   routing?: VideoRoutingOptions
   /** Per-attachment override for the client's Request-based transport. */
   http?: HttpTransport
-  surfaceMode?: 'dom' | 'transparent-canvas'
   suspendWhenHidden?: boolean
   autoplay?: boolean
   deviceProfile?: DeviceProfile

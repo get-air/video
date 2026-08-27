@@ -13,7 +13,6 @@
   },
   "include": [
     "guest-js/**/*.ts",
-    "canvas/**/*.ts",
     "react/**/*",
     "scripts/**/*.ts",
     "qualification/**/*.ts",

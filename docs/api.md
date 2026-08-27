@@ -16,7 +16,7 @@ interface VideoClient {
 ```
 
 Clients do not mutate global state. Pass the same client to imperative,
-React, canvas, and Blits integrations.
+React integrations.
 
 ## Attachment options
 
@@ -27,7 +27,6 @@ interface AttachVideoOptions {
   fallbackBackends?: readonly VideoBackend[]
   backendOptions?: VideoBackendOptions
   http?: HttpTransport
-  surfaceMode?: 'dom' | 'transparent-canvas'
   suspendWhenHidden?: boolean
   autoplay?: boolean
   deviceProfile?: 'auto' | 'mobile' | 'tv' | 'desktop'
@@ -197,6 +196,3 @@ All public failures are `Schema.TaggedError` values. Platform adapters are
 provided as a registry layer; the Promise client executes this same Effect
 implementation and converts its error channel to ordinary thrown error objects
 at the JavaScript boundary.
-
-`AttachCanvasVideoOptions` and Blits attachment options also accept an explicit
-client.

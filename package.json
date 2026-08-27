@@ -47,10 +47,6 @@
       "types": "./dist-js/guest-js/effect.d.ts",
       "import": "./dist-js/effect.js"
     },
-    "./canvas": {
-      "types": "./dist-js/canvas/index.d.ts",
-      "import": "./dist-js/canvas.js"
-    },
     "./react": {
       "types": "./dist-js/react/index.d.ts",
       "import": "./dist-js/react.js"

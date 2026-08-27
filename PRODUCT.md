@@ -38,7 +38,7 @@ The product is Air. The television interface inherits Air Horizon's black broadc
 
 ## Evidence on Hand
 
-- Working video controller, React, canvas, and native adapter integrations in this repository.
+- Working video controller, React, and native adapter integrations in this repository.
 - Existing Air television tokens and focus behavior in the sibling Air application.
 - Locally generated and staged media fixtures for deterministic testing.
 

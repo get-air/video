@@ -31,7 +31,6 @@ const config: RollupOptions = {
     index: 'guest-js/index.ts',
     controls: 'guest-js/controls.ts',
     effect: 'guest-js/effect.ts',
-    canvas: 'canvas/index.ts',
     react: 'react/index.tsx',
   },
   output: {
@@ -47,7 +46,6 @@ const config: RollupOptions = {
       declarationDir: 'dist-js',
       include: [
         'guest-js/**/*.ts',
-        'canvas/**/*.ts',
         'react/**/*.ts',
         'react/**/*.tsx',
       ],
