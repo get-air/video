@@ -42,4 +42,4 @@ jobs:
           cd "$smoke_dir"
           npm init --yes >/dev/null
           npm install "$GITHUB_WORKSPACE/$package_tarball" >/dev/null
-          node --input-type=module -e "await import('@get-air/video'); await import('@get-air/video/effect'); await import('@get-air/video/canvas')"
+          node --input-type=module -e "await import('@get-air/video'); await import('@get-air/video/effect'); await import('@get-air/video/controls')"
